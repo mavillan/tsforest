@@ -1,0 +1,8 @@
+numpy>=1.10.0
+pandas>=0.23.4
+dask>=2.1.0
+zope.interface>=4.6.0
+lightgbm>=2.2.3
+h2o>=3.36
+stldecompose>=0.0.5
+fbprophet>=0.5
