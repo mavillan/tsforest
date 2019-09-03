@@ -4,8 +4,7 @@ from zope.interface import implementer
 import h2o
 from h2o.estimators import H2OGradientBoostingEstimator
 # init the cluster if is not already up
-if h2o.cluster() is None: h2o.init(nthreads=-1,
-                                   max_mem_size='100G')
+if h2o.cluster() is None: h2o.init(nthreads=-1)
 
 from tsforest import metrics
 from tsforest.config import gbm_parameters
