@@ -111,7 +111,7 @@ class GBMForecaster(ForecasterBase):
             training_params['validation_frame'] = valid_features_casted
             model_params['stopping_rounds'] = early_stopping_rounds 
         if 'weight' in self.train_features.columns:
-            training_params['weight_column']='weight'
+            training_params['weights_column']='weight'
 
         # model training
         model = H2OGradientBoostingEstimator(**model_params)
