@@ -1,7 +1,7 @@
 import itertools
-import dask
 import pandas as pd
 pd.set_option('display.max_colwidth', -1)
+from joblib import Parallel, delayed
 
 
 def fit_evaluate(model_class, model_config, model_params, train_data, valid_period, eval_period, metric):
@@ -10,7 +10,6 @@ def fit_evaluate(model_class, model_config, model_params, train_data, valid_peri
     ----------
     model_class_path: tuple
         Class path of the model: (module_name, class_name)
-    
     '''
     model = model_class(model_params=model_params, **model_config)
     model.fit(train_data, valid_period)
@@ -38,15 +37,15 @@ class GridSearch(object):
         dictionary of hyperparameters in the form: "parameter_name" : [param_value,]
     hyperparams_fixed: dict
         dictionary of fixed hyperparameters in the form: {"param_name" : "param_value",}
-    dask_client: dask.distributed.Client
-        Client dask interface where jobs will be run in parallel 
+    n_jobs: int
+        number of parallel jobs to run on grid search
     '''
 
     def __init__(self, model_class, features=['calendar_mixed','events'], 
                  detrend=True, response_scaling=True, lags=None, 
                  window_sizes=None, window_functions=None, 
                  hyperparams=dict(), hyperparams_fixed=dict(), 
-                 dask_client=None):
+                 n_jobs=-1):
         self.model_class = model_class
         self.features = features
         self.detrend = detrend
@@ -56,9 +55,7 @@ class GridSearch(object):
         self.window_functions = window_functions
         self.hyperparams = hyperparams
         self.hyperparams_fixed = hyperparams_fixed
-        self.dask_client = dask_client
-        assert isinstance(self.dask_client, dask.distributed.Client), \
-            'A dask.distributed.Client instance should be provided'
+        self.n_jobs = n_jobs
 
     def fit(self, train_data, valid_period=None, eval_period=None, metric='rmse'):
         '''
@@ -89,7 +86,6 @@ class GridSearch(object):
             eval_period = pd.merge(train_data, valid_period, how='inner', on=['ds'])
 
         # parallel fit & evaluation of model on hyperparams
-        print(f'Track progress on: {self.dask_client.cluster.dashboard_link}')
         model_config = {'features':self.features,
                         'detrend':self.detrend,
                         'response_scaling':self.response_scaling,
@@ -102,13 +98,15 @@ class GridSearch(object):
                   'valid_period':valid_period,
                   'eval_period':eval_period,
                   'metric':metric}
-        lazy_results = [dask.delayed(fit_evaluate)(model_params=model_params, **kwargs)
-                        for model_params in hyperparams_list]
-        _results = list(dask.compute(*lazy_results))
+        
+        with Parallel(n_jobs=self.n_jobs) as parallel:
+            delayed_func = delayed(fit_evaluate)
+            _results = parallel(delayed_func(model_params=model_params, **kwargs)
+                                for model_params in hyperparams_list)
         # removes fixed hyperparams from results
         results = [({key:value for (key,value) in r[0].items() 
                      if key not in hyperparams_fixed.keys()}, r[1], r[2]) 
-                   for r in _results]
+                    for r in _results]
         # sort the results by error
         results.sort(key = lambda x: x[-1])
         results_dataframe = pd.DataFrame([(r[0],r[1],r[2]) for r in results],
