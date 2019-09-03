@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 
 def compute_mae(yreal, ypred):
     # not considering yreal and ypred values when yreal = 0
