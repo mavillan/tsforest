@@ -3,9 +3,11 @@ language: python
 python:
   - "3.7"
 
+before_install:
+  - sudo apt-get install -y openjdk-8-jdk
 install:
+  - 
   - pip install --upgrade pip
   - pip install -U -r requirements.txt
-
 script:
   - python setup.py develop && python -m unittest tests/*_test.py
