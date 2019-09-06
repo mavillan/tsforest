@@ -4,6 +4,8 @@ from itertools import count
 import collections
 from fbprophet import Prophet
 
+from tsforest.config import prophet_kwargs,prophet_kwargs_extra
+
 import warnings
 warnings.filterwarnings("ignore", message="invalid value encountered in subtract")
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -117,3 +119,83 @@ def compute_prophet_trend(prophet_model, future_dataframe=None, periods=30, incl
         future_dataframe = prophet_model.setup_dataframe(future_dataframe.copy())
         trend = prophet_model.predict_trend(future_dataframe)
     return trend
+
+def compute_stl_trend(data, n_periods=0):
+    """
+    Parameters
+    -----------
+    data: pandas.DataFrame 
+        trainig data with columns 'ds' (dates) and 'y' (values)
+    n_periods: int
+        number of time periods ahead of data
+    Returns
+    ----------
+    pd.DataFrame
+        A dataframe with columns "ds" and "trend" with the trend
+        estimation and projection
+    """
+    # training data in the format of STL
+    data = data.copy()
+    idx = pd.DatetimeIndex(data.ds) 
+    data["date"] = idx
+    data.set_index("date", inplace=True)
+    data.drop("ds", axis=1, inplace=True)
+
+    # filling gaps
+    data_filled = (data
+                   .resample("D")
+                   .mean()
+                   .interpolate("linear"))
+
+    # trend estimation with stl
+    stl = decompose(data_filled, period=7)
+    stl_trend = stl.trend
+    stl_trend.rename(columns={'y':'trend'}, inplace=True)
+    stl_fcst = forecast(stl, steps=n_periods, fc_func=drift)
+    stl_fcst.rename(columns={'drift':'trend'}, inplace=True)
+    stl_trend = stl_trend.append(stl_fcst)
+
+    # just keeping dates with dates in data frame
+    idx = idx.append(stl_fcst.index)
+    stl_trend = stl_trend.reindex(idx)
+    stl_trend.reset_index(inplace=True, drop=True)
+    return stl_trend
+
+
+class TrendEstimator():
+    """
+    Parameters
+    ----------
+    backend: string
+        name of the backend to be used: ('prophet', ...)
+    """
+
+    def __init__(self, backend='prophet'):
+        self.backend = backend
+
+    def fit(self, data):
+        """
+        Parameters
+        ----------
+        data: pandas.DataFrame
+            dataframe with columns 'ds' and 'y'
+        """
+        trend_estimator = train_model(data,
+                            prophet_kwargs, 
+                            prophet_kwargs_extra, 
+                            ts_preproc=True)
+        self.trend_estimator = trend_estimator
+
+    def predict(self, predict_period):
+        """
+        Parameters
+        ----------
+        predict_period: pandas.DataFrame
+            dataframe with column 'ds' containing the time period to be predicted
+        """
+        # evaluate over the data_time_range period
+        if self.backend == 'prophet':
+            trend = compute_prophet_trend(self.trend_estimator, future_dataframe=predict_period)
+            trend_dataframe = pd.DataFrame({'ds':predict_period.ds.values, 'trend':trend.values})
+        return trend_dataframe
+

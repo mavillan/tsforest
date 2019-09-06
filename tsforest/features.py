@@ -11,10 +11,9 @@ from stldecompose.forecast_funcs import (naive,
                                          seasonal_naive)
 
 from tsforest.prophet import *
-from tsforest.config import prophet_kwargs,prophet_kwargs_extra
 from tsforest.config import (calendar_sequential_features_types,
-                                calendar_cyclical_features_types,
-                                all_features_types)
+                             calendar_cyclical_features_types,
+                             all_features_types)
 
 
 def compute_calendar_features(start_time, end_time, freq='D'):
@@ -57,47 +56,6 @@ def compute_calendar_features(start_time, end_time, freq='D'):
     calendar_data["week_day"] += 1
     return calendar_data
 
-def compute_stl_trend(data, n_periods=0):
-    """
-    Parameters
-    -----------
-    data: pandas.DataFrame 
-        trainig data with columns 'ds' (dates) and 'y' (values)
-    n_periods: int
-        number of time periods ahead of data
-    Returns
-    ----------
-    pd.DataFrame
-        A dataframe with columns "ds" and "trend" with the trend
-        estimation and projection
-    """
-    # training data in the format of STL
-    data = data.copy()
-    idx = pd.DatetimeIndex(data.ds) 
-    data["date"] = idx
-    data.set_index("date", inplace=True)
-    data.drop("ds", axis=1, inplace=True)
-
-    # filling gaps
-    data_filled = (data
-                   .resample("D")
-                   .mean()
-                   .interpolate("linear"))
-
-    # trend estimation with stl
-    stl = decompose(data_filled, period=7)
-    stl_trend = stl.trend
-    stl_trend.rename(columns={'y':'trend'}, inplace=True)
-    stl_fcst = forecast(stl, steps=n_periods, fc_func=drift)
-    stl_fcst.rename(columns={'drift':'trend'}, inplace=True)
-    stl_trend = stl_trend.append(stl_fcst)
-
-    # just keeping dates with dates in data frame
-    idx = idx.append(stl_fcst.index)
-    stl_trend = stl_trend.reindex(idx)
-    stl_trend.reset_index(inplace=True, drop=True)
-    return stl_trend
-
 def compute_lag_features(data, lags):
     """
     data: pandas.Dataframe
@@ -135,7 +93,6 @@ def compute_rw_features(data, window_sizes, window_functions):
     rw_features = pd.concat(features, axis=1)
     rw_features.columns = features_names
     return rw_features
-
 
 class FeaturesGenerator():
 
@@ -188,20 +145,7 @@ class FeaturesGenerator():
             columns_to_drop = list(calendar_sequential_features_types.keys())
             calendar_features.drop(columns=columns_to_drop, inplace=True)
         all_features_list.append(calendar_features.set_index('ds'))
-        
-        if "prophet" in self.include_features:
-            # prophet seasonal features
-            prophet_model = train_model(data.loc[:, ["ds","y"]],
-                                        prophet_kwargs, 
-                                        prophet_kwargs_extra, 
-                                        ts_preproc=True)
-            # evaluate over the data_time_range period
-            future_dataframe = pd.DataFrame({"ds":data_time_range.index.values})
-            prophet_trend = compute_prophet_trend(prophet_model, future_dataframe=future_dataframe)
-            prophet_trend = pd.DataFrame({"prophet_trend":prophet_trend.values}, index=data_time_range.index)
-            all_features_list.append(prophet_trend)
-            self.prophet_model = prophet_model
-        
+                
         if "lag" in self.include_features:
             lag_features = compute_lag_features(data, lags=self.lags)
             lag_features.set_index(data_time_range.index, inplace=True)
