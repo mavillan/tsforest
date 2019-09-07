@@ -2,6 +2,7 @@ import itertools
 import pandas as pd
 pd.set_option('display.max_colwidth', -1)
 from joblib import Parallel, delayed
+from tqdm import tqdm
 
 
 def fit_evaluate(model_class, model_config, model_params, train_data, valid_period, test_data, metric):
@@ -101,8 +102,10 @@ class GridSearch(object):
         
         with Parallel(n_jobs=self.n_jobs) as parallel:
             delayed_func = delayed(fit_evaluate)
-            _results = parallel(delayed_func(model_params=model_params, **kwargs)
-                                for model_params in hyperparams_list)
+            with tqdm(hyperparams_list) as tqdm_hyperparams_list:
+                _results = parallel(delayed_func(model_params=model_params, **kwargs)
+                                    for model_params in tqdm_hyperparams_list)
+            tqdm_hyperparams_list.close()
         # removes fixed hyperparams from results
         results = [({key:value for (key,value) in r[0].items() 
                      if key not in hyperparams_fixed.keys()}, r[1], r[2]) 
