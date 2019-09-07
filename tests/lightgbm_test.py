@@ -14,8 +14,8 @@ class TestLightGMB(unittest.TestCase):
         print("##################"*12)
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
 
-        fcaster = LGBMForecaster(model_params={'num_iterations':100,
-                                                'learning_rate':0.2}, 
+        fcaster = LGBMForecaster(model_params={'num_iterations':30,
+                                                'learning_rate':0.3}, 
                                  features=['calendar_mixed'])
         fcaster.fit(train_data=data)
     
@@ -23,8 +23,8 @@ class TestLightGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
-        fcaster = LGBMForecaster(model_params={'num_iterations':100,
-                                                'learning_rate':0.2}, 
+        fcaster = LGBMForecaster(model_params={'num_iterations':30,
+                                                'learning_rate':0.3}, 
                                  features=['calendar_mixed'])
         fcaster.fit(train_data=data, valid_period=valid_period)
 
@@ -32,8 +32,8 @@ class TestLightGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
-        fcaster = LGBMForecaster(model_params={'num_iterations':100,
-                                                'learning_rate':0.2}, 
+        fcaster = LGBMForecaster(model_params={'num_iterations':30,
+                                                'learning_rate':0.3}, 
                                  features=['calendar_mixed','lag'],
                                  lags=[1,2,3,4,5,6,7])
         fcaster.fit(train_data=data, valid_period=valid_period)
@@ -42,8 +42,8 @@ class TestLightGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
-        fcaster = LGBMForecaster(model_params={'num_iterations':100,
-                                                'learning_rate':0.2}, 
+        fcaster = LGBMForecaster(model_params={'num_iterations':30,
+                                                'learning_rate':0.3}, 
                                  features=['calendar_mixed','rw'],
                                  window_functions=['mean','median','min','max','sum'],
                                  window_sizes=[7,14,21,28])
@@ -53,8 +53,8 @@ class TestLightGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
 
-        fcaster = LGBMForecaster(model_params={'num_iterations':100,
-                                                'learning_rate':0.2}, 
+        fcaster = LGBMForecaster(model_params={'num_iterations':30,
+                                                'learning_rate':0.3}, 
                                  features=['calendar_mixed'])
         fcaster.fit(train_data=data)
         prediction_dataframe = fcaster.predict(test_period)
@@ -63,8 +63,8 @@ class TestLightGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
 
-        fcaster = LGBMForecaster(model_params={'num_iterations':100,
-                                                'learning_rate':0.2}, 
+        fcaster = LGBMForecaster(model_params={'num_iterations':30,
+                                                'learning_rate':0.3}, 
                                  features=['calendar_mixed','lag'],
                                  lags=[1,2,3,4,5,6,7])
         fcaster.fit(train_data=data)
@@ -74,13 +74,24 @@ class TestLightGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
 
-        fcaster = LGBMForecaster(model_params={'num_iterations':100,
-                                                'learning_rate':0.2}, 
+        fcaster = LGBMForecaster(model_params={'num_iterations':30,
+                                                'learning_rate':0.3}, 
                                  features=['calendar_mixed','rw'],
                                  window_functions=['mean','median','min','max','sum'],
                                  window_sizes=[7,14,21,28])
         fcaster.fit(train_data=data)
         prediction_dataframe = fcaster.predict(test_period)
 
+    def test_it_fit_evaluate(self):
+        data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
+        train_data = data.query('ds < "2019-06-01"')
+        eval_data = data.query('ds >= "2019-06-01"')
 
+        fcaster = LGBMForecaster(model_params={'num_iterations':30,
+                                               'learning_rate':0.3}, 
+                                 features=['calendar_mixed'])
+        fcaster.fit(train_data=train_data)
+        error = fcaster.evaluate(eval_data)
 
+        assert type(error)==np.float64, \
+            f'fcaster.evaluate returns {error} which is not of type numpy.float64'

@@ -4,13 +4,6 @@ pd.options.mode.chained_assignment = None
 import calendar
 import h2o
 
-from stldecompose import decompose, forecast
-from stldecompose.forecast_funcs import (naive,
-                                         drift, 
-                                         mean, 
-                                         seasonal_naive)
-
-from tsforest.prophet import *
 from tsforest.config import (calendar_sequential_features_types,
                              calendar_cyclical_features_types,
                              all_features_types)
@@ -191,13 +184,6 @@ class FeaturesGenerator():
             columns_to_drop = list(calendar_sequential_features_types.keys())
             calendar_features.drop(columns=columns_to_drop, inplace=True)
         all_features_list.append(calendar_features.set_index('ds'))
-
-        if "prophet" in self.include_features:
-            prophet_model = self.prophet_model
-            future_dataframe = pd.DataFrame({"ds":data_time_range.index.values})
-            prophet_trend = compute_prophet_trend(prophet_model, future_dataframe=future_dataframe)
-            prophet_trend = pd.DataFrame({"prophet_trend":prophet_trend.values}, index=data_time_range.index)
-            all_features_list.append(prophet_trend)
 
         if "lag" in self.include_features:
             column_names = [f'lag_{lag}' for lag in self.lags]

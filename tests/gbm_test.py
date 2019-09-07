@@ -13,8 +13,8 @@ class TestGMB(unittest.TestCase):
     def test_it_fit(self):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
 
-        fcaster = GBMForecaster(model_params={'ntrees':100,
-                                              'learn_rate':0.2}, 
+        fcaster = GBMForecaster(model_params={'ntrees':30,
+                                              'learn_rate':0.3}, 
                                 features=['calendar_mixed'])
         fcaster.fit(train_data=data)
     
@@ -22,8 +22,8 @@ class TestGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
-        fcaster = GBMForecaster(model_params={'ntrees':100,
-                                              'learn_rate':0.2}, 
+        fcaster = GBMForecaster(model_params={'ntrees':30,
+                                              'learn_rate':0.3}, 
                                 features=['calendar_mixed'])
         fcaster.fit(train_data=data, valid_period=valid_period)
 
@@ -31,8 +31,8 @@ class TestGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
-        fcaster = GBMForecaster(model_params={'ntrees':100,
-                                              'learn_rate':0.2}, 
+        fcaster = GBMForecaster(model_params={'ntrees':30,
+                                              'learn_rate':0.3}, 
                                 features=['calendar_mixed','lag'],
                                 lags=[1,2,3,4,5,6,7])
         fcaster.fit(train_data=data, valid_period=valid_period)
@@ -41,8 +41,8 @@ class TestGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
-        fcaster = GBMForecaster(model_params={'ntrees':100,
-                                              'learn_rate':0.2}, 
+        fcaster = GBMForecaster(model_params={'ntrees':30,
+                                              'learn_rate':0.3}, 
                                 features=['calendar_mixed','rw'],
                                 window_functions=['mean','median','min','max','sum'],
                                 window_sizes=[7,14,21,28])
@@ -52,8 +52,8 @@ class TestGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
         
-        fcaster = GBMForecaster(model_params={'ntrees':100,
-                                              'learn_rate':0.2}, 
+        fcaster = GBMForecaster(model_params={'ntrees':30,
+                                              'learn_rate':0.3}, 
                                 features=['calendar_mixed'])
         fcaster.fit(train_data=data)
         prediction_dataframe = fcaster.predict(test_period)
@@ -62,8 +62,8 @@ class TestGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
         
-        fcaster = GBMForecaster(model_params={'ntrees':100,
-                                              'learn_rate':0.2}, 
+        fcaster = GBMForecaster(model_params={'ntrees':30,
+                                              'learn_rate':0.3}, 
                                 features=['calendar_mixed','lag'],
                                 lags=[1,2,3,4,5,6,7])
         fcaster.fit(train_data=data)
@@ -73,10 +73,24 @@ class TestGMB(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
 
-        fcaster = GBMForecaster(model_params={'ntrees':100,
-                                              'learn_rate':0.2}, 
+        fcaster = GBMForecaster(model_params={'ntrees':30,
+                                              'learn_rate':0.3}, 
                                 features=['calendar_mixed','rw'],
                                 window_functions=['mean','median','min','max','sum'],
                                 window_sizes=[7,14,21,28])
         fcaster.fit(train_data=data)
         prediction_dataframe = fcaster.predict(test_period)
+    
+    def test_it_fit_evaluate(self):
+        data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
+        train_data = data.query('ds < "2019-06-01"')
+        eval_data = data.query('ds >= "2019-06-01"')
+
+        fcaster = GBMForecaster(model_params={'ntrees':100,
+                                               'learn_rate':0.2}, 
+                                 features=['calendar_mixed'])
+        fcaster.fit(train_data=train_data)
+        error = fcaster.evaluate(eval_data)
+
+        assert type(error)==np.float64, \
+            f'fcaster.evaluate returns {error} which is not of type numpy.float64'

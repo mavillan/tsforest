@@ -85,7 +85,13 @@ class GBMForecaster(ForecasterBase):
                 valid_period = pd.DataFrame(valid_period, columns=['ds'])
             valid_features = super()._prepare_valid_features(valid_period, train_features)
             valid_start_time = valid_features.ds.min()
+            # removes validation period from train data
+            train_data = train_data.query('ds < @valid_start_time')
             train_features = train_features.query('ds < @valid_start_time')
+
+        train_features['y_hat'] = super()._prepare_train_response(train_features)
+        if valid_period is not None:
+            valid_features['y_hat'] = super()._prepare_valid_response(valid_features)
 
         train_features_casted = self._cast_dataframe(train_features, features_types)
         valid_features_casted = self._cast_dataframe(valid_features, features_types) \
@@ -98,7 +104,7 @@ class GBMForecaster(ForecasterBase):
 
         self.valid_period = valid_period
         self.valid_features = valid_features if valid_period is not None else None
-        self.valid_features_casted = valid_features_casted if valid_period is not None else None
+        self.valid_features_casted = valid_features_casted
 
         # model_params overwrites default params of model
         model_params = {**gbm_parameters, **self.model_params}
@@ -118,7 +124,7 @@ class GBMForecaster(ForecasterBase):
         self.model = model
         self.best_iteration = int(model.summary()["number_of_trees"][0])
 
-    def _predict(self, model, test_features):
+    def _predict(self, model, test_features, trend_dataframe):
         """
         Parameters
         ----------
@@ -126,6 +132,8 @@ class GBMForecaster(ForecasterBase):
             Trained model
         test_features: pandas.DataFrame
             datafame containing the features for the test period
+        trend_dataframe: pandas.DataFrame
+            dataframe containing the trend estimation over the test period
         """
         y_train = self.train_features.y.values
         y_valid = self.valid_features.y.values \
@@ -141,7 +149,7 @@ class GBMForecaster(ForecasterBase):
                 for window_func in self.window_functions:
                     for window in self.window_sizes:
                         test_features.loc[idx, f'{window_func}_{window}'] = getattr(np, window_func)(y[-window:])
-            test_features_casted = self._cast_dataframe(test_features.loc[[idx],:], 
+            test_features_casted = self._cast_dataframe(test_features.loc[[idx], :], 
                                                         self.features_types)
             _y_pred = model.predict(test_features_casted)
             y_pred = _y_pred.as_data_frame().values[:,0]
@@ -150,7 +158,7 @@ class GBMForecaster(ForecasterBase):
                 y_pred *= self.y_std
                 y_pred += self.y_mean
             if self.detrend:
-                y_pred += test_features.loc[idx, 'prophet_trend']
+                y_pred += trend_dataframe.loc[idx, 'trend']
             y = np.append(y, [y_pred])
         return np.asarray(prediction).ravel()
 
@@ -168,10 +176,15 @@ class GBMForecaster(ForecasterBase):
         assert set(self.train_data.columns) - set(test_period.columns) == {'y'}, \
             '"test_period" must have the same columns as self.train_data except for "y"'
         
-        test_features,_ = super()._prepare_test_features(test_period)
+        test_features = super()._prepare_test_features(test_period)
+        if self.detrend:
+            trend_estimator = self.trend_estimator
+            trend_dataframe = trend_estimator.predict(test_period.loc[:, ['ds']])
+        else:
+            trend_dataframe = None
 
         if 'lag' in self.features or 'rw' in self.features:
-            prediction = self._predict(self.model, test_features)
+            prediction = self._predict(self.model, test_features, trend_dataframe)
         else:
             test_features_casted = self._cast_dataframe(test_features, 
                                                         self.features_types)
@@ -182,7 +195,7 @@ class GBMForecaster(ForecasterBase):
             prediction *= self.y_std
             prediction += self.y_mean
         if self.detrend:
-            prediction += test_features.prophet_trend.values
+            prediction += trend_dataframe.trend.values
         if "closed" in test_features.columns:
             closed_mask = test_features["closed"]==1
             prediction[closed_mask] = 0
@@ -192,22 +205,22 @@ class GBMForecaster(ForecasterBase):
         prediction_dataframe = pd.DataFrame({"ds":test_period.ds, "y_pred":prediction})
         return prediction_dataframe
 
-    def evaluate(self, eval_data, metric='rmse'):
+    def evaluate(self, test_data, metric='rmse'):
         '''
         Parameters
         ----------
-        eval_data: pandas.DataFrame
+        test_data: pandas.DataFrame
             dataframe with the same columns as "train_data"
         Returns
         ----------
         error: float
             error of predictions according to the error measure
         '''
-        assert set(self.train_data.columns) == set(eval_data.columns), \
-            '"eval_data" must have the same columns as "train_data"'
-        eval_data = eval_data.copy()
-        y_real = eval_data.pop("y")
-        y_pred = self.predict(eval_data)["y_pred"].values
+        assert set(self.train_data.columns) == set(test_data.columns), \
+            '"test_data" must have the same columns as "train_data"'
+        test_data = test_data.copy()
+        y_real = test_data.pop("y")
+        y_pred = self.predict(test_data)["y_pred"].values
         error = metrics.compute_rmse(y_real, y_pred)
         return error
 

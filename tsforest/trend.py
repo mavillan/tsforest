@@ -3,6 +3,11 @@ import pandas as pd
 from itertools import count
 import collections
 from fbprophet import Prophet
+from stldecompose import decompose, forecast
+from stldecompose.forecast_funcs import (naive,
+                                         drift, 
+                                         mean, 
+                                         seasonal_naive)
 
 from tsforest.config import prophet_kwargs,prophet_kwargs_extra
 
