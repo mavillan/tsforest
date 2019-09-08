@@ -1,7 +1,9 @@
 import pandas as pd
+
 from tsforest.config import gbm_parameters
 from tsforest.features import FeaturesGenerator
 from tsforest.trend import TrendEstimator
+from tsforest import metrics
 
 class ForecasterBase(object):
       
@@ -99,3 +101,22 @@ class ForecasterBase(object):
             y_hat /= self.y_std 
             
         return y_hat
+
+    def evaluate(self, test_data, metric='rmse'):
+        '''
+        Parameters
+        ----------
+        test_data: pandas.DataFrame
+            dataframe with the same columns as "train_data"
+        Returns
+        ----------
+        error: float
+            error of predictions according to the error measure
+        '''
+        assert set(self.train_data.columns) == set(test_data.columns), \
+            '"test_data" must have the same columns as "train_data"'
+        test_data = test_data.copy()
+        y_real = test_data.pop("y")
+        y_pred = self.predict(test_data)["y_pred"].values
+        error = metrics.compute_rmse(y_real, y_pred)
+        return error

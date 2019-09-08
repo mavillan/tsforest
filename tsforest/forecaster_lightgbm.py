@@ -6,7 +6,6 @@ import pandas as pd
 from zope.interface import implementer
 import lightgbm as lgb
 
-from tsforest import metrics
 from tsforest.config import lgbm_parameters
 from tsforest.forecaster_base import ForecasterBase
 from tsforest.forecaster_interface import ForecasterInterface
@@ -207,25 +206,6 @@ class LGBMForecaster(ForecasterBase):
             
         prediction_dataframe = pd.DataFrame({'ds':test_period.ds, 'y_pred':prediction})
         return prediction_dataframe
-
-    def evaluate(self, test_data, metric='rmse'):
-        '''
-        Parameters
-        ----------
-        test_data: pandas.DataFrame
-            dataframe with the same columns as "train_data"
-        Returns
-        ----------
-        error: float
-            error of predictions according to the error measure
-        '''
-        assert set(self.train_data.columns) == set(test_data.columns), \
-            '"test_data" must have the same columns as "train_data"'
-        test_data = test_data.copy()
-        y_real = test_data.pop('y')
-        y_pred = self.predict(test_data)['y_pred'].values
-        error = metrics.compute_rmse(y_real, y_pred)
-        return error
 
     def show_variable_importance(self):
         pass
