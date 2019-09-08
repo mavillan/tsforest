@@ -1,4 +1,5 @@
 import pandas as pd
+from inspect import getmembers, isfunction
 
 from tsforest.config import gbm_parameters
 from tsforest.features import FeaturesGenerator
@@ -108,6 +109,8 @@ class ForecasterBase(object):
         ----------
         test_data: pandas.DataFrame
             dataframe with the same columns as "train_data"
+        metric: string
+            possible values: "mae", "mape", "mse", "rmse", "smape"
         Returns
         ----------
         error: float
@@ -115,8 +118,13 @@ class ForecasterBase(object):
         '''
         assert set(self.train_data.columns) == set(test_data.columns), \
             '"test_data" must have the same columns as "train_data"'
+        available_metrics = [member[0].split('_')[1] for member in getmembers(metrics) 
+                             if isfunction(member[1])]
+        assert metric in available_metrics, \
+            f'"metric" must be any of these: {available_metrics}'
         test_data = test_data.copy()
         y_real = test_data.pop("y")
         y_pred = self.predict(test_data)["y_pred"].values
-        error = metrics.compute_rmse(y_real, y_pred)
+        error_func = getattr(metrics, f'compute_{metric}')
+        error = error_func(y_real, y_pred)
         return error
