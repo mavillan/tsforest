@@ -68,8 +68,10 @@ class LGBMForecaster(ForecasterBase):
         dataset_params = {'data':features_dataframe.loc[:,self.input_features],
                           'categorical_feature':categorical_feature,
                           'free_raw_data':False}
+        if 'weight' in features_dataframe.columns:
+            dataset_params['weight'] = features_dataframe.weight.values
         if self.target in features_dataframe.columns:
-            dataset_params['label'] = features_dataframe.loc[:,self.target]
+            dataset_params['label'] = features_dataframe.loc[:, self.target]
         features_dataframe_casted = lgb.Dataset(**dataset_params)
         return features_dataframe_casted     
 
@@ -102,11 +104,6 @@ class LGBMForecaster(ForecasterBase):
         train_features_casted = self._cast_dataframe(train_features, features_types)
         valid_features_casted = self._cast_dataframe(valid_features, features_types) \
                                 if valid_period is not None else None
-
-        if 'weight' in train_features.columns:
-            train_features_casted.set_weight(train_features.loc[:,'weight'])
-            if valid_features_casted is not None:
-                valid_features_casted.set_weight(valid_features.loc[:,'weight'])
 
         self.train_data = train_data
         self.features_types = features_types
