@@ -3,18 +3,14 @@ gbm_parameters = {
     'ntrees':500,
     'max_depth':5,
     'nbins':20,
-    'nbins_top_level':1024,
     'learn_rate':0.1,
     'stopping_metric':'mse',
-    'stopping_rounds':25,
     'score_each_iteration':True,
     'categorical_encoding':'enum',
     'sample_rate':1.0,
-    'col_sample_rate':0.9,
-    'min_rows':10,
-    'seed':23,
-    'distribution':'gaussian',
-    'stopping_rounds':0
+    'col_sample_rate':0.95,
+    'min_rows':20,
+    'distribution':'gaussian'
 }
 
 # lightgbm default parameters
@@ -24,9 +20,8 @@ lgbm_parameters = {
     'num_leaves':31,
     'min_data_in_leaf':20,
     'learning_rate':0.1,
-    'feature_fraction':0.9,
+    'feature_fraction':0.95,
     'num_iterations':500,
-    'early_stopping_round':0
 }
 
 # fbprophet default parameters 

@@ -35,9 +35,6 @@ class GBMForecaster(ForecasterBase):
     def __init__(self, model_params=dict(), features=['calendar_mixed','events'], features_types=dict(),
                  detrend=True, response_scaling=True, lags=None, window_sizes=None, window_functions=None):
 
-        assert set(model_params.keys()) < set(gbm_parameters), \
-            f'parameters {set(model_params.keys()) - set(gbm_parameters)} are not allowed in H2OGradientBoostingEstimator'
-
         if lags is not None and 'lag' not in features:
             features.append('lag')
         if (window_sizes is not None and window_functions is not None) and 'rw' not in features:
