@@ -12,7 +12,9 @@ gbm_parameters = {
     'sample_rate':1.0,
     'col_sample_rate':0.9,
     'min_rows':10,
-    'seed':23
+    'seed':23,
+    'distribution':'gaussian',
+    'stopping_rounds':0
 }
 
 # lightgbm default parameters
@@ -23,7 +25,8 @@ lgbm_parameters = {
     'min_data_in_leaf':20,
     'learning_rate':0.1,
     'feature_fraction':0.9,
-    'num_iterations':500
+    'num_iterations':500,
+    'early_stopping_round':0
 }
 
 # fbprophet default parameters 
