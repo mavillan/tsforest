@@ -20,6 +20,7 @@ class ForecasterBase(object):
                                                window_sizes=self.window_sizes,
                                                window_functions=self.window_functions)
         train_features,features_types = features_generator.compute_train_features(train_data)
+        features_types = {**features_types, **self.features_types}
 
         exclude_features = ['ds', 'y', 'y_hat', 'month_day', 'weight', 'fold_column']
         self.input_features = [feature for feature in train_features.columns

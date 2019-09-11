@@ -19,6 +19,8 @@ class GBMForecaster(ForecasterBase):
         Dictionary containing the specific parameters of the boosting model 
     features: list
         List of features to be included
+    features_types: dict
+        Dictionary containing the type of the features
     detrend: bool
         Whether or not to remove the trend from time serie
     response_scaling:
@@ -30,8 +32,8 @@ class GBMForecaster(ForecasterBase):
     window_functions: list
         List of string names of the window functions
     '''
-    def __init__(self, model_params=dict(), features=['calendar_mixed','events'], detrend=True,
-                 response_scaling=True, lags=None, window_sizes=None, window_functions=None):
+    def __init__(self, model_params=dict(), features=['calendar_mixed','events'], features_types=dict(),
+                 detrend=True, response_scaling=True, lags=None, window_sizes=None, window_functions=None):
 
         assert set(model_params.keys()) < set(gbm_parameters), \
             f'parameters {set(model_params.keys()) - set(gbm_parameters)} are not allowed in H2OGradientBoostingEstimator'
@@ -43,6 +45,7 @@ class GBMForecaster(ForecasterBase):
 
         self.model_params = model_params
         self.features = features
+        self.features_types = features_types
         self.detrend = detrend
         self.response_scaling = response_scaling
         self.lags = lags

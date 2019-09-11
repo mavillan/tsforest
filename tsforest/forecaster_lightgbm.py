@@ -20,6 +20,8 @@ class LGBMForecaster(ForecasterBase):
         Dictionary containing the parameters of the specific boosting model 
     features: list
         List of features to be included
+    features_types: dict
+        Dictionary containing the type of the features
     detrend: bool
         Whether or not to remove the trend from time series
     response_scaling:
@@ -31,8 +33,8 @@ class LGBMForecaster(ForecasterBase):
     window_functions: list
         List of string names of the window functions
     '''
-    def __init__(self, model_params=dict(), features=['calendar_mixed','events'], detrend=True,
-                 response_scaling=True, lags=None, window_sizes=None, window_functions=None):
+    def __init__(self, model_params=dict(), features=['calendar_mixed','events'], features_types=dict(),
+                 detrend=True, response_scaling=True, lags=None, window_sizes=None, window_functions=None):
 
         assert set(model_params.keys()) < set(lgbm_parameters), \
             f'parameters {set(model_params.keys()) - set(lgbm_parameters)} are not allowed in LightGBM'
@@ -44,6 +46,7 @@ class LGBMForecaster(ForecasterBase):
 
         self.model_params = model_params
         self.features = features
+        self.features_types = features_types
         self.detrend = detrend
         self.response_scaling = response_scaling
         self.lags = lags
