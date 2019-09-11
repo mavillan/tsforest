@@ -67,8 +67,8 @@ class LGBMForecaster(ForecasterBase):
             features dataframe casted to LightGBM dataframe format
         """
         categorical_feature = [feat for feat,dtype in features_types.items() 
-                               if dtype=='categorical']
-        dataset_params = {'data':features_dataframe.loc[:,self.input_features],
+                               if dtype=='categorical' and feat in self.input_features]
+        dataset_params = {'data':features_dataframe.loc[:, self.input_features],
                           'categorical_feature':categorical_feature,
                           'free_raw_data':False}
         if 'weight' in features_dataframe.columns:

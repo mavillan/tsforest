@@ -65,8 +65,10 @@ class GBMForecaster(ForecasterBase):
         features_dataframe_casted: h2o.H2OFrame
             features dataframe casted to H2O dataframe format
         """
+        _features_types = {feat:dtype for feat,dtype in features_types.items()
+                           if feat in self.input_features}
         features_dataframe_casted = h2o.H2OFrame(features_dataframe, 
-                                                 column_types=features_types)
+                                                 column_types=_features_types)
         return features_dataframe_casted
 
     def fit(self, train_data, valid_period=None, early_stopping_rounds=20):
