@@ -130,7 +130,8 @@ class FeaturesGenerator():
 
         # generating the calendar features
         if np.any(['calendar' in feat for feat in self.include_features]):
-            calendar_features = compute_calendar_features(data.ds.min(), data.ds.max())
+            calendar_features = (compute_calendar_features(data.ds.min(), data.ds.max())
+                                 .merge(data.loc[:, ['ds']], how='inner', on=['ds']))
         if "calendar_sequential" in self.include_features:
             columns_to_drop = list(calendar_cyclical_features_types.keys())
             calendar_features.drop(columns=columns_to_drop, inplace=True)
