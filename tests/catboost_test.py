@@ -3,7 +3,7 @@ import pandas as pd
 
 import unittest
 
-from tsforest.forecaster_lightgbm import CatBoostForecaster
+from tsforest.forecaster_catboost import CatBoostForecaster
 from tsforest.utils import make_time_range
 
 DATA_PATH = './tests/tests_data/data.csv'
@@ -14,7 +14,7 @@ class TestCatBoost(unittest.TestCase):
         print("##################"*12)
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
 
-        fcaster = CatBoostForecaster(model_params={'num_iterations':30,
+        fcaster = CatBoostForecaster(model_params={'iterations':30,
                                                    'learning_rate':0.3}, 
                                      features=['calendar_mixed'])
         fcaster.fit(train_data=data)
@@ -23,7 +23,7 @@ class TestCatBoost(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
-        fcaster = CatBoostForecaster(model_params={'num_iterations':30,
+        fcaster = CatBoostForecaster(model_params={'iterations':30,
                                                    'learning_rate':0.3}, 
                                      features=['calendar_mixed'])
         fcaster.fit(train_data=data, valid_period=valid_period)
@@ -32,7 +32,7 @@ class TestCatBoost(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
-        fcaster = CatBoostForecaster(model_params={'num_iterations':30,
+        fcaster = CatBoostForecaster(model_params={'iterations':30,
                                                    'learning_rate':0.3}, 
                                      features=['calendar_mixed','lag'],
                                      lags=[1,2,3,4,5,6,7])
@@ -42,7 +42,7 @@ class TestCatBoost(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
-        fcaster = CatBoostForecaster(model_params={'num_iterations':30,
+        fcaster = CatBoostForecaster(model_params={'iterations':30,
                                                    'learning_rate':0.3}, 
                                      features=['calendar_mixed','rw'],
                                      window_functions=['mean','median','min','max','sum'],
@@ -53,7 +53,7 @@ class TestCatBoost(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
 
-        fcaster = CatBoostForecaster(model_params={'num_iterations':30,
+        fcaster = CatBoostForecaster(model_params={'iterations':30,
                                                    'learning_rate':0.3}, 
                                      features=['calendar_mixed'])
         fcaster.fit(train_data=data)
@@ -63,7 +63,7 @@ class TestCatBoost(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
 
-        fcaster = CatBoostForecaster(model_params={'num_iterations':30,
+        fcaster = CatBoostForecaster(model_params={'iterations':30,
                                                    'learning_rate':0.3}, 
                                      features=['calendar_mixed','lag'],
                                      lags=[1,2,3,4,5,6,7])
@@ -74,7 +74,7 @@ class TestCatBoost(unittest.TestCase):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
 
-        fcaster = CatBoostForecaster(model_params={'num_iterations':30,
+        fcaster = CatBoostForecaster(model_params={'iterations':30,
                                                    'learning_rate':0.3}, 
                                      features=['calendar_mixed','rw'],
                                      window_functions=['mean','median','min','max','sum'],
@@ -87,7 +87,7 @@ class TestCatBoost(unittest.TestCase):
         train_data = data.query('ds < "2019-06-01"')
         eval_data = data.query('ds >= "2019-06-01"')
 
-        fcaster = CatBoostForecaster(model_params={'num_iterations':30,
+        fcaster = CatBoostForecaster(model_params={'iterations':30,
                                                   'learning_rate':0.3}, 
                                      features=['calendar_mixed'])
         fcaster.fit(train_data=train_data)
