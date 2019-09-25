@@ -24,6 +24,13 @@ lgbm_parameters = {
     'num_iterations':500,
 }
 
+cat_parameters = {
+    'iterations':500,
+    'learning_rate':0.1,
+    'l2_leaf_reg':3.0,
+    'depth':6
+}
+
 # fbprophet default parameters 
 prophet_kwargs = {
     'n_changepoints':120,
