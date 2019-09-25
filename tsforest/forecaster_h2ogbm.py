@@ -11,7 +11,7 @@ from tsforest.forecaster_base import ForecasterBase
 from tsforest.forecaster_interface import ForecasterInterface
 
 @implementer(ForecasterInterface)
-class GBMForecaster(ForecasterBase):
+class H2OGBMForecaster(ForecasterBase):
     '''
     Parameters
     ----------

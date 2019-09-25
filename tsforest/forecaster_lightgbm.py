@@ -12,7 +12,7 @@ from tsforest.forecaster_interface import ForecasterInterface
 
 
 @implementer(ForecasterInterface)
-class LGBMForecaster(ForecasterBase):
+class LightGBMForecaster(ForecasterBase):
     '''
     Parameters
     ----------
@@ -63,10 +63,10 @@ class LGBMForecaster(ForecasterBase):
         features_dataframe_casted: lightgbm.basic.Dataset
             features dataframe casted to LightGBM dataframe format
         """
-        categorical_feature = [feat for feat,dtype in features_types.items() 
-                               if dtype=='categorical' and feat in self.input_features]
+        categorical_features = [feat for feat,dtype in features_types.items() 
+                                if dtype=='categorical' and feat in self.input_features]
         dataset_params = {'data':features_dataframe.loc[:, self.input_features],
-                          'categorical_feature':categorical_feature,
+                          'categorical_feature':categorical_features,
                           'free_raw_data':False}
         if 'weight' in features_dataframe.columns:
             dataset_params['weight'] = features_dataframe.weight.values
