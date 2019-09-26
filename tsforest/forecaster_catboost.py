@@ -124,7 +124,7 @@ class CatBoostForecaster(ForecasterBase):
         model = CatBoostRegressor(**model_params)
         model.fit(**training_params)
         self.model = model
-        #self.best_iteration = ...
+        self.best_iteration = model.best_iteration_ if model.best_iteration_ is not None else model.tree_count_
 
     def _predict(self, model, test_features, trend_dataframe):
         """
