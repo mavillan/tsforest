@@ -15,7 +15,7 @@ class TestGMB(unittest.TestCase):
 
         fcaster = H2OGBMForecaster(model_params={'ntrees':30,
                                                 'learn_rate':0.3}, 
-                                   features=['calendar_mixed'])
+                                   features=['calendar', 'calendar_cyclical'])
         fcaster.fit(train_data=data)
     
     def test_it_fit_with_valid_period(self):
@@ -24,7 +24,7 @@ class TestGMB(unittest.TestCase):
 
         fcaster = H2OGBMForecaster(model_params={'ntrees':30,
                                                  'learn_rate':0.3}, 
-                                   features=['calendar_mixed'])
+                                   features=['calendar', 'calendar_cyclical'])
         fcaster.fit(train_data=data, valid_period=valid_period)
 
     def test_it_fit_with_lag_features(self):
@@ -33,7 +33,7 @@ class TestGMB(unittest.TestCase):
 
         fcaster = H2OGBMForecaster(model_params={'ntrees':30,
                                                  'learn_rate':0.3}, 
-                                   features=['calendar_mixed','lag'],
+                                   features=['calendar', 'calendar_cyclical', 'lag'],
                                    lags=[1,2,3,4,5,6,7])
         fcaster.fit(train_data=data, valid_period=valid_period)
     
@@ -43,7 +43,7 @@ class TestGMB(unittest.TestCase):
 
         fcaster = H2OGBMForecaster(model_params={'ntrees':30,
                                                  'learn_rate':0.3}, 
-                                   features=['calendar_mixed','rw'],
+                                   features=['calendar', 'calendar_cyclical', 'rw'],
                                    window_functions=['mean','median','min','max','sum'],
                                    window_sizes=[7,14,21,28])
         fcaster.fit(train_data=data, valid_period=valid_period)
@@ -54,7 +54,7 @@ class TestGMB(unittest.TestCase):
         
         fcaster = H2OGBMForecaster(model_params={'ntrees':30,
                                                  'learn_rate':0.3}, 
-                                   features=['calendar_mixed'])
+                                   features=['calendar', 'calendar_cyclical'])
         fcaster.fit(train_data=data)
         prediction_dataframe = fcaster.predict(test_period)
 
@@ -64,7 +64,7 @@ class TestGMB(unittest.TestCase):
         
         fcaster = H2OGBMForecaster(model_params={'ntrees':30,
                                                  'learn_rate':0.3}, 
-                                   features=['calendar_mixed','lag'],
+                                   features=['calendar', 'calendar_cyclical','lag'],
                                    lags=[1,2,3,4,5,6,7])
         fcaster.fit(train_data=data)
         prediction_dataframe = fcaster.predict(test_period)
@@ -75,7 +75,7 @@ class TestGMB(unittest.TestCase):
 
         fcaster = H2OGBMForecaster(model_params={'ntrees':30,
                                                  'learn_rate':0.3}, 
-                                   features=['calendar_mixed','rw'],
+                                   features=['calendar', 'calendar_cyclical', 'rw'],
                                    window_functions=['mean','median','min','max','sum'],
                                    window_sizes=[7,14,21,28])
         fcaster.fit(train_data=data)
@@ -88,7 +88,7 @@ class TestGMB(unittest.TestCase):
 
         fcaster = H2OGBMForecaster(model_params={'ntrees':100,
                                                  'learn_rate':0.2}, 
-                                   features=['calendar_mixed'])
+                                   features=['calendar', 'calendar_cyclical'])
         fcaster.fit(train_data=train_data)
         error = fcaster.evaluate(eval_data)
 

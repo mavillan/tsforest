@@ -19,8 +19,8 @@ class H2OGBMForecaster(ForecasterBase):
         Dictionary containing the specific parameters of the boosting model 
     features: list
         List of features to be included
-    features_types: dict
-        Dictionary containing the type of the features
+    categorical_features: list
+        List of names of categorical features
     detrend: bool
         Whether or not to remove the trend from time serie
     response_scaling:
@@ -32,8 +32,8 @@ class H2OGBMForecaster(ForecasterBase):
     window_functions: list
         List of string names of the window functions
     '''
-    def __init__(self, model_params=dict(), features=['calendar_mixed','events'], features_types=dict(),
-                 detrend=True, response_scaling=True, lags=None, window_sizes=None, window_functions=None):
+    def __init__(self, model_params=dict(), features=['calendar_mixed'], categorical_features=list(),
+                 detrend=True, response_scaling=False, lags=None, window_sizes=None, window_functions=None):
 
         if lags is not None and 'lag' not in features:
             features.append('lag')
@@ -42,30 +42,30 @@ class H2OGBMForecaster(ForecasterBase):
 
         self.model_params = model_params
         self.features = features
-        self.features_types = features_types
+        self._categorical_features = categorical_features
         self.detrend = detrend
         self.response_scaling = response_scaling
         self.lags = lags
         self.window_sizes = window_sizes
         self.window_functions = window_functions
 
-    def _cast_dataframe(self, features_dataframe, features_types):
+    def _cast_dataframe(self, features_dataframe, categorical_features):
         """
         Parameters
         ----------
         features_dataframe: pandas.DataFrame
             dataframe containing all the features
-        features_types: dict
-            dictionary containing the type of the features
+        categorical_features: list
+            list of names of categorical features
         Returns
         ----------
         features_dataframe_casted: h2o.H2OFrame
             features dataframe casted to H2O dataframe format
         """
-        _features_types = {feat:dtype for feat,dtype in features_types.items()
-                           if feat in self.input_features}
+        features_types = {feature:'categorical' for feature in categorical_features
+                          if feature in self.input_features}
         features_dataframe_casted = h2o.H2OFrame(features_dataframe, 
-                                                 column_types=_features_types)
+                                                 column_types=features_types)
         return features_dataframe_casted
 
     def fit(self, train_data, valid_period=None, early_stopping_rounds=20):
@@ -80,7 +80,7 @@ class H2OGBMForecaster(ForecasterBase):
         assert {"ds","y"} <= set(train_data.columns.values), \
             '"train_data" must contain columns "ds" and "y"'
         
-        train_features,features_types = super()._prepare_train_features(train_data)
+        train_features,categorical_features = super()._prepare_train_features(train_data)
         if valid_period is not None:
             if isinstance(valid_period, pd.core.series.Series):
                 valid_period = pd.DataFrame(valid_period, columns=['ds'])
@@ -94,12 +94,12 @@ class H2OGBMForecaster(ForecasterBase):
         if valid_period is not None:
             valid_features['y_hat'] = super()._prepare_valid_response(valid_features)
 
-        train_features_casted = self._cast_dataframe(train_features, features_types)
-        valid_features_casted = self._cast_dataframe(valid_features, features_types) \
+        train_features_casted = self._cast_dataframe(train_features, categorical_features)
+        valid_features_casted = self._cast_dataframe(valid_features, categorical_features) \
                                 if valid_period is not None else None
 
         self.train_data = train_data
-        self.features_types = features_types
+        self.categorical_features = categorical_features
         self.train_features = train_features
         self.train_features_casted = train_features_casted
 
@@ -151,7 +151,7 @@ class H2OGBMForecaster(ForecasterBase):
                     for window in self.window_sizes:
                         test_features.loc[idx, f'{window_func}_{window}'] = getattr(np, window_func)(y[-window:])
             test_features_casted = self._cast_dataframe(test_features.loc[[idx], :], 
-                                                        self.features_types)
+                                                        self.categorical_features)
             _y_pred = model.predict(test_features_casted)
             y_pred = _y_pred.as_data_frame().values[:,0]
             prediction.append(y_pred.copy())
@@ -188,7 +188,7 @@ class H2OGBMForecaster(ForecasterBase):
             prediction = self._predict(self.model, test_features, trend_dataframe)
         else:
             test_features_casted = self._cast_dataframe(test_features, 
-                                                        self.features_types)
+                                                        self.categorical_features)
             _prediction = self.model.predict(test_features_casted)
             prediction = _prediction.as_data_frame().values[:,0]
 

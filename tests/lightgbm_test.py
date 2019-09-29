@@ -16,7 +16,7 @@ class TestLightGMB(unittest.TestCase):
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
-                                     features=['calendar_mixed'])
+                                     features=['calendar', 'calendar_cyclical'])
         fcaster.fit(train_data=data)
     
     def test_it_fit_with_valid_period(self):
@@ -25,7 +25,7 @@ class TestLightGMB(unittest.TestCase):
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
-                                     features=['calendar_mixed'])
+                                     features=['calendar', 'calendar_cyclical'])
         fcaster.fit(train_data=data, valid_period=valid_period)
 
     def test_it_fit_with_lag_features(self):
@@ -34,7 +34,7 @@ class TestLightGMB(unittest.TestCase):
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
-                                     features=['calendar_mixed','lag'],
+                                     features=['calendar', 'calendar_cyclical','lag'],
                                      lags=[1,2,3,4,5,6,7])
         fcaster.fit(train_data=data, valid_period=valid_period)
 
@@ -44,7 +44,7 @@ class TestLightGMB(unittest.TestCase):
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
-                                     features=['calendar_mixed','rw'],
+                                     features=['calendar', 'calendar_cyclical','rw'],
                                      window_functions=['mean','median','min','max','sum'],
                                      window_sizes=[7,14,21,28])
         fcaster.fit(train_data=data, valid_period=valid_period)
@@ -55,7 +55,7 @@ class TestLightGMB(unittest.TestCase):
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
-                                     features=['calendar_mixed'])
+                                     features=['calendar', 'calendar_cyclical'])
         fcaster.fit(train_data=data)
         prediction_dataframe = fcaster.predict(test_period)
 
@@ -65,7 +65,7 @@ class TestLightGMB(unittest.TestCase):
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
-                                     features=['calendar_mixed','lag'],
+                                     features=['calendar', 'calendar_cyclical','lag'],
                                      lags=[1,2,3,4,5,6,7])
         fcaster.fit(train_data=data)
         prediction_dataframe = fcaster.predict(test_period)
@@ -76,7 +76,7 @@ class TestLightGMB(unittest.TestCase):
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
-                                     features=['calendar_mixed','rw'],
+                                     features=['calendar', 'calendar_cyclical','rw'],
                                      window_functions=['mean','median','min','max','sum'],
                                      window_sizes=[7,14,21,28])
         fcaster.fit(train_data=data)
@@ -89,7 +89,7 @@ class TestLightGMB(unittest.TestCase):
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
-                                     features=['calendar_mixed'])
+                                     features=['calendar', 'calendar_cyclical'])
         fcaster.fit(train_data=train_data)
         error = fcaster.evaluate(eval_data)
 
