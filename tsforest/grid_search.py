@@ -24,8 +24,8 @@ class GridSearch(object):
         class of the model to be instantiated
     features: list
         list of features to be included
-    features_types: dict
-        dictionary containing the type of the features
+    categorical_features: list
+        list of names of categorical features
     detrend: bool
         whether or not to remove the trend from time serie
     response_scaling:
@@ -44,14 +44,14 @@ class GridSearch(object):
         number of parallel jobs to run on grid search
     '''
 
-    def __init__(self, model_class, features=['calendar_mixed','events'], features_types=dict(),
-                 detrend=True, response_scaling=True, lags=None, 
-                 window_sizes=None, window_functions=None, 
+    def __init__(self, model_class, features=['calendar_mixed','events'], 
+                 categorical_features=list(), detrend=True, response_scaling=True, 
+                 lags=None, window_sizes=None, window_functions=None, 
                  hyperparams=dict(), hyperparams_fixed=dict(), 
                  n_jobs=-1):
         self.model_class = model_class
         self.features = features
-        self.features_types = features_types
+        self.categorical_features = categorical_features
         self.detrend = detrend
         self.response_scaling = response_scaling
         self.lags = lags
@@ -91,7 +91,7 @@ class GridSearch(object):
 
         # parallel fit & evaluation of model on hyperparams
         model_config = {'features':self.features,
-                        'features_types':self.features_types,
+                        'categorical_features':self.categorical_features,
                         'detrend':self.detrend,
                         'response_scaling':self.response_scaling,
                         'lags':self.lags,

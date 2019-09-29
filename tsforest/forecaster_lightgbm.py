@@ -20,8 +20,8 @@ class LightGBMForecaster(ForecasterBase):
         Dictionary containing the parameters of the specific boosting model 
     features: list
         List of features to be included
-    features_types: dict
-        Dictionary containing the type of the features
+    categorical_features: list
+        List of names of categorical features
     detrend: bool
         Whether or not to remove the trend from time series
     response_scaling:
@@ -33,8 +33,8 @@ class LightGBMForecaster(ForecasterBase):
     window_functions: list
         List of string names of the window functions
     '''
-    def __init__(self, model_params=dict(), features=['calendar_mixed','events'], features_types=dict(),
-                 detrend=True, response_scaling=True, lags=None, window_sizes=None, window_functions=None):
+    def __init__(self, model_params=dict(), features=['calendar_mixed'], categorical_features=list(),
+                 detrend=True, response_scaling=False, lags=None, window_sizes=None, window_functions=None):
 
         if lags is not None and 'lag' not in features:
             features.append('lag')
@@ -43,33 +43,31 @@ class LightGBMForecaster(ForecasterBase):
 
         self.model_params = model_params
         self.features = features
-        self.features_types = features_types
+        self._categorical_features = categorical_features
         self.detrend = detrend
         self.response_scaling = response_scaling
         self.lags = lags
         self.window_sizes = window_sizes
         self.window_functions = window_functions
 
-    def _cast_dataframe(self, features_dataframe, features_types):
+    def _cast_dataframe(self, features_dataframe, categorical_features):
         """
         Parameters
         ----------
         features_dataframe: pandas.DataFrame
             dataframe containing all the features
-        features_types: dict
-            dictionary containing the type of the features
+        categorical_features: list
+            list of names of categorical features
         Returns
         ----------
         features_dataframe_casted: lightgbm.basic.Dataset
             features dataframe casted to LightGBM dataframe format
         """
-        categorical_features = [feat for feat,dtype in features_types.items() 
-                                if dtype=='categorical' and feat in self.input_features]
         dataset_params = {'data':features_dataframe.loc[:, self.input_features],
                           'categorical_feature':categorical_features,
                           'free_raw_data':False}
         if 'weight' in features_dataframe.columns:
-            dataset_params['weight'] = features_dataframe.weight.values
+            dataset_params['weight'] = features_dataframe.loc[:, 'weight']
         if self.target in features_dataframe.columns:
             dataset_params['label'] = features_dataframe.loc[:, self.target]
         features_dataframe_casted = lgb.Dataset(**dataset_params)
@@ -87,7 +85,7 @@ class LightGBMForecaster(ForecasterBase):
         assert {"ds","y"} <= set(train_data.columns.values), \
             '"train_data" must contain columns "ds" and "y"'
     
-        train_features,features_types = super()._prepare_train_features(train_data)
+        train_features,categorical_features = super()._prepare_train_features(train_data)
         if valid_period is not None:
             if isinstance(valid_period, pd.core.series.Series):
                 valid_period = pd.DataFrame(valid_period, columns=['ds'])
@@ -101,12 +99,12 @@ class LightGBMForecaster(ForecasterBase):
         if valid_period is not None:
             valid_features['y_hat'] = super()._prepare_valid_response(valid_features)
         
-        train_features_casted = self._cast_dataframe(train_features, features_types)
-        valid_features_casted = self._cast_dataframe(valid_features, features_types) \
+        train_features_casted = self._cast_dataframe(train_features, categorical_features)
+        valid_features_casted = self._cast_dataframe(valid_features, categorical_features) \
                                 if valid_period is not None else None
 
         self.train_data = train_data
-        self.features_types = features_types
+        self.categorical_features = categorical_features
         self.train_features = train_features
         self.train_features_casted = train_features_casted
 

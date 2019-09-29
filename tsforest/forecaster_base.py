@@ -19,14 +19,14 @@ class ForecasterBase(object):
                                                lags=self.lags,
                                                window_sizes=self.window_sizes,
                                                window_functions=self.window_functions)
-        train_features,features_types = features_generator.compute_train_features(train_data)
-        features_types = {**features_types, **self.features_types}
+        train_features,categorical_features = features_generator.compute_train_features(train_data)
+        categorical_features = categorical_features + self._categorical_features
 
         exclude_features = ['ds', 'y', 'y_hat', 'month_day', 'weight', 'fold_column']
         self.input_features = [feature for feature in train_features.columns
                                if feature not in exclude_features]
         self.features_generator = features_generator
-        return train_features,features_types
+        return train_features,categorical_features
     
     def _prepare_valid_features(self, valid_period, train_features):
         '''
@@ -52,7 +52,7 @@ class ForecasterBase(object):
         test_features: pandas.DataFrame
             Dataframe containing all the features for evaluating the trained model
         '''
-        test_features,features_types = self.features_generator.compute_test_features(test_period)
+        test_features,_ = self.features_generator.compute_test_features(test_period)
         return test_features
     
     def _prepare_train_response(self, train_features):

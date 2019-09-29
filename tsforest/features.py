@@ -49,19 +49,19 @@ def compute_calendar_features(start_time, end_time, freq='D'):
     calendar_data['month_progress'] = calendar_data.month_day/days_of_month
 
     # cyclical encodings: day of week
-    calendar_data["week_day_cos"] = np.cos(calendar_data.week_day*(2.*np.pi/7))
-    calendar_data["week_day_sin"] = np.sin(calendar_data.week_day*(2.*np.pi/7))
+    calendar_data['week_day_cos'] = np.cos(calendar_data.week_day*(2.*np.pi/7))
+    calendar_data['week_day_sin'] = np.sin(calendar_data.week_day*(2.*np.pi/7))
     # cyclical encodings: day of year
-    calendar_data["year_day_cos"] = np.cos((calendar_data.year_day-1)*(2.*np.pi/366))
-    calendar_data["year_day_sin"] = np.sin((calendar_data.year_day-1)*(2.*np.pi/366))
+    calendar_data['year_day_cos'] = np.cos((calendar_data.year_day-1)*(2.*np.pi/366))
+    calendar_data['year_day_sin'] = np.sin((calendar_data.year_day-1)*(2.*np.pi/366))
     # cyclical encodings: week of year
-    calendar_data["year_week_cos"] = np.cos((calendar_data.year_week-1)*(2.*np.pi/52))
-    calendar_data["year_week_sin"] = np.sin((calendar_data.year_week-1)*(2.*np.pi/52))
+    calendar_data['year_week_cos'] = np.cos((calendar_data.year_week-1)*(2.*np.pi/52))
+    calendar_data['year_week_sin'] = np.sin((calendar_data.year_week-1)*(2.*np.pi/52))
     # cyclical encodings: month of year
-    calendar_data["month_cos"] = np.cos((calendar_data.month-1)*(2.*np.pi/12))
-    calendar_data["month_sin"] = np.sin((calendar_data.month-1)*(2.*np.pi/12))
+    calendar_data['month_cos'] = np.cos((calendar_data.month-1)*(2.*np.pi/12))
+    calendar_data['month_sin'] = np.sin((calendar_data.month-1)*(2.*np.pi/12))
     # week_day shifted to 1-7
-    calendar_data["week_day"] += 1
+    calendar_data['week_day'] += 1
     return calendar_data
 
 def compute_lag_features(data, lags):
@@ -142,14 +142,14 @@ class FeaturesGenerator():
         all_features_list = list()
 
         # generating the calendar features
-        if np.any(['calendar' in feat for feat in self.include_features]):
+        if {'calendar','calendar_cyclical'} & set(self.include_features):
             calendar_features = (compute_calendar_features(data.ds.min(), data.ds.max())
                                  .merge(data.loc[:, ['ds']], how='inner', on=['ds']))
-        if "calendar_sequential" in self.include_features:
-            columns_to_drop = list(calendar_cyclical_features_types.keys())
-            calendar_features.drop(columns=columns_to_drop, inplace=True)
-        elif "calendar_cyclical" in self.include_features:
+        if "calendar" not in self.include_features:
             columns_to_drop = list(calendar_sequential_features_types.keys())
+            calendar_features.drop(columns=columns_to_drop, inplace=True)
+        elif "calendar_cyclical" not in self.include_features:
+            columns_to_drop = list(calendar_cyclical_features_types.keys())
             calendar_features.drop(columns=columns_to_drop, inplace=True)
         all_features_list.append(calendar_features.set_index('ds'))
                 
@@ -171,9 +171,9 @@ class FeaturesGenerator():
                         .reset_index()
                         .rename({'index':'ds'}, axis=1)
                         .assign(y = lambda x: x['y'].fillna(0.)))
-        features_types = {feature:dtype for feature,dtype in all_features_types.items()
-                          if feature in all_features.columns}
-        return all_features,features_types
+        categorical_features = [feature for feature,dtype in all_features_types.items()
+                                if feature in all_features.columns and dtype=='categorical']
+        return all_features,categorical_features
         
     def compute_test_features(self, data):
         """
@@ -191,11 +191,11 @@ class FeaturesGenerator():
         if np.any(['calendar' in feat for feat in self.include_features]):
             calendar_features = (compute_calendar_features(data.ds.min(), data.ds.max())
                                  .merge(data.loc[:, ['ds']], how='inner', on=['ds']))
-        if "calendar_sequential" in self.include_features:
-            columns_to_drop = list(calendar_cyclical_features_types.keys())
-            calendar_features.drop(columns=columns_to_drop, inplace=True)
-        elif "calendar_cyclical" in self.include_features:
+        if "calendar" not in self.include_features:
             columns_to_drop = list(calendar_sequential_features_types.keys())
+            calendar_features.drop(columns=columns_to_drop, inplace=True)
+        elif "calendar_cyclical" not in self.include_features:
+            columns_to_drop = list(calendar_cyclical_features_types.keys())
             calendar_features.drop(columns=columns_to_drop, inplace=True)
         all_features_list.append(calendar_features.set_index('ds'))
 
@@ -217,6 +217,6 @@ class FeaturesGenerator():
         all_features_list.append(data.set_index("ds"))
         all_features = pd.concat(all_features_list, axis=1)
         all_features.reset_index(inplace=True)
-        features_types = {feature:dtype for feature,dtype in all_features_types.items()
-                          if feature in all_features.columns}
-        return all_features,features_types
+        categorical_features = [feature for feature,dtype in all_features_types.items()
+                                if feature in all_features.columns and dtype=='categorical']
+        return all_features,categorical_features
