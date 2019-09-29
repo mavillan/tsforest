@@ -1,15 +1,15 @@
 # h2o gbm default parameters
 gbm_parameters = {
-    'ntrees':500,
+    'ntrees':300,
     'max_depth':5,
     'nbins':20,
-    'learn_rate':0.1,
+    'learn_rate':0.25,
     'stopping_metric':'mse',
     'score_each_iteration':True,
     'categorical_encoding':'enum',
     'sample_rate':1.0,
-    'col_sample_rate':0.95,
-    'min_rows':20,
+    'col_sample_rate':1.0,
+    'min_rows':5,
     'distribution':'gaussian'
 }
 
@@ -18,17 +18,19 @@ lgbm_parameters = {
     'boosting_type':'gbrt',
     'objective':'regression',
     'num_leaves':31,
-    'min_data_in_leaf':20,
-    'learning_rate':0.1,
-    'feature_fraction':0.95,
-    'num_iterations':500,
+    'min_data_in_leaf':5,
+    'learning_rate':0.25,
+    'feature_fraction':1.0,
+    'num_iterations':300
 }
 
 cat_parameters = {
-    'iterations':500,
-    'learning_rate':0.1,
+    'iterations':300,
+    'learning_rate':0.25,
     'l2_leaf_reg':3.0,
-    'depth':6
+    'depth':6,
+    'has_time':True,
+    'bootstrap_type':'No'
 }
 
 # fbprophet default parameters 
