@@ -26,6 +26,8 @@ class GridSearch(object):
         list of features to be included
     categorical_features: list
         list of names of categorical features
+    calendar_anomaly: list
+        List of names of calendar features affected by an anomaly
     detrend: bool
         whether or not to remove the trend from time serie
     response_scaling:
@@ -45,13 +47,15 @@ class GridSearch(object):
     '''
 
     def __init__(self, model_class, features=['calendar_mixed','events'], 
-                 categorical_features=list(), detrend=True, response_scaling=True, 
+                 categorical_features=list(), calendar_anomaly=None, 
+                 detrend=True, response_scaling=True, 
                  lags=None, window_sizes=None, window_functions=None, 
                  hyperparams=dict(), hyperparams_fixed=dict(), 
                  n_jobs=-1):
         self.model_class = model_class
         self.features = features
         self.categorical_features = categorical_features
+        self.calendar_anomaly = calendar_anomaly
         self.detrend = detrend
         self.response_scaling = response_scaling
         self.lags = lags
@@ -92,6 +96,7 @@ class GridSearch(object):
         # parallel fit & evaluation of model on hyperparams
         model_config = {'features':self.features,
                         'categorical_features':self.categorical_features,
+                        'calendar_anomaly':self.calendar_anomaly,
                         'detrend':self.detrend,
                         'response_scaling':self.response_scaling,
                         'lags':self.lags,
