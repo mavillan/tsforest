@@ -21,6 +21,8 @@ class H2OGBMForecaster(ForecasterBase):
         List of features to be included
     categorical_features: list
         List of names of categorical features
+    calendar_anomaly: list
+        List of names of calendar features affected by an anomaly 
     detrend: bool
         Whether or not to remove the trend from time serie
     response_scaling:
@@ -33,7 +35,8 @@ class H2OGBMForecaster(ForecasterBase):
         List of string names of the window functions
     '''
     def __init__(self, model_params=dict(), features=['calendar_mixed'], categorical_features=list(),
-                 detrend=True, response_scaling=False, lags=None, window_sizes=None, window_functions=None):
+                 calendar_anomaly=None, detrend=True, response_scaling=False, 
+                 lags=None, window_sizes=None, window_functions=None):
 
         if lags is not None and 'lag' not in features:
             features.append('lag')
@@ -43,6 +46,7 @@ class H2OGBMForecaster(ForecasterBase):
         self.model_params = model_params
         self.features = features
         self._categorical_features = categorical_features
+        self.calendar_anomaly = calendar_anomaly
         self.detrend = detrend
         self.response_scaling = response_scaling
         self.lags = lags

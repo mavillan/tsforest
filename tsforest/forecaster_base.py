@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from inspect import getmembers, isfunction
 
@@ -23,8 +24,14 @@ class ForecasterBase(object):
         categorical_features = categorical_features + self._categorical_features
         if 'zero_response' in train_features.columns:
             train_features = train_features.query('zero_response != 1')
+        if 'calendar_anomaly' in train_features.columns:
+            assert self.calendar_anomaly is not None, \
+                '"calendar_anomaly" column found, but names of affected features was not provided'
+            idx = train_features.query('calendar_anomaly == 1')
+            train_features.loc[idx, self.calendar_anomaly] = np.nan
 
-        exclude_features = ['ds', 'y', 'y_hat', 'month_day', 'weight', 'fold_column', 'zero_response']
+        exclude_features = ['ds', 'y', 'y_hat', 'month_day', 'weight', 
+                            'fold_column', 'zero_response', 'calendar_anomaly']
         self.input_features = [feature for feature in train_features.columns
                                if feature not in exclude_features]
         self.features_generator = features_generator
@@ -53,6 +60,11 @@ class ForecasterBase(object):
             Dataframe containing all the features for evaluating the trained model
         '''
         test_features,_ = self.features_generator.compute_test_features(test_period)
+        if 'calendar_anomaly' in test_features.columns:
+            assert self.calendar_anomaly is not None, \
+                '"calendar_anomaly" column found, but names of affected features was not provided'
+            idx = test_features.query('calendar_anomaly == 1')
+            test_features.loc[idx, self.calendar_anomaly] = np.nan
         return test_features
     
     def _prepare_train_response(self, train_features):
