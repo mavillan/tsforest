@@ -79,16 +79,17 @@ class LightGBMForecaster(ForecasterBase):
         ----------
         train_data : pandas.DataFrame
             dataframe with "at least" columns "ds" and "y"
-        valid_period: pandas.Series or pandas.DataFrame
-            series or dataframe (with column "ds") indicating the validation period
+        valid_period: pandas.DataFrame
+            dataframe (with column "ds") indicating the validation period
         '''
         assert {"ds","y"} <= set(train_data.columns.values), \
             '"train_data" must contain columns "ds" and "y"'
-    
         train_features,categorical_features = super()._prepare_train_features(train_data)
+
         if valid_period is not None:
-            if isinstance(valid_period, pd.core.series.Series):
-                valid_period = pd.DataFrame(valid_period, columns=['ds'])
+            assert (valid_period.ds.min() >= train_data.ds.min() and 
+                valid_period.ds.max() <= train_data.ds.max()), \
+                'valid_period must be contained in the time period of train_data'
             valid_features = super()._prepare_valid_features(valid_period, train_features)
             valid_start_time = valid_features.ds.min()
             # removes validation period from train data
@@ -193,9 +194,9 @@ class LightGBMForecaster(ForecasterBase):
             prediction += self.y_mean
         if self.detrend:
             prediction += trend_dataframe.trend.values
-        if 'closed' in test_features.columns:
-            closed_mask = test_features['closed']==1
-            prediction[closed_mask] = 0
+        if 'zero_response' in test_features.columns:
+            zero_response_mask = test_features['zero_response']==1
+            prediction[zero_response_mask] = 0
 
         self.test_features = test_features
             

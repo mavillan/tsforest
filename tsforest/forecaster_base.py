@@ -21,8 +21,10 @@ class ForecasterBase(object):
                                                window_functions=self.window_functions)
         train_features,categorical_features = features_generator.compute_train_features(train_data)
         categorical_features = categorical_features + self._categorical_features
+        if 'zero_response' in train_features.columns:
+            train_features = train_features.query('zero_response != 1')
 
-        exclude_features = ['ds', 'y', 'y_hat', 'month_day', 'weight', 'fold_column']
+        exclude_features = ['ds', 'y', 'y_hat', 'month_day', 'weight', 'fold_column', 'zero_response']
         self.input_features = [feature for feature in train_features.columns
                                if feature not in exclude_features]
         self.features_generator = features_generator
@@ -33,11 +35,9 @@ class ForecasterBase(object):
         valid_period : pandas.DataFrame
             dataframe with column "ds" indicating the validation period
         train_features: pandas.DataFrame
-            dataframe
+            dataframe containing the training features
         '''
         valid_features = pd.merge(valid_period, train_features, how='inner', on=['ds'])
-        assert len(valid_features)==len(valid_period), \
-            'valid_period must be contained in the time period of time_features'
         return valid_features
 
     def _prepare_test_features(self, test_period):
