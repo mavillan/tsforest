@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from inspect import getmembers, isfunction
 
-from tsforest.config import gbm_parameters
 from tsforest.features import FeaturesGenerator
 from tsforest.trend import TrendEstimator
 from tsforest import metrics
@@ -26,7 +25,7 @@ class ForecasterBase(object):
             train_features = train_features.query('zero_response != 1')
         if 'calendar_anomaly' in train_features.columns:
             assert self.calendar_anomaly is not None, \
-                '"calendar_anomaly" column found, but names of affected features was not provided'
+                '"calendar_anomaly" column found, but no names of affected features were provided'
             idx = train_features.query('calendar_anomaly == 1').index
             train_features.loc[idx, self.calendar_anomaly] = np.nan
 
@@ -45,6 +44,8 @@ class ForecasterBase(object):
             dataframe containing the training features
         '''
         valid_features = pd.merge(valid_period, train_features, how='inner', on=['ds'])
+        assert len(valid_features) > 0, \
+            'none of the dates in valid_period are in train_features'
         return valid_features
 
     def _prepare_test_features(self, test_period):
@@ -62,7 +63,7 @@ class ForecasterBase(object):
         test_features,_ = self.features_generator.compute_test_features(test_period)
         if 'calendar_anomaly' in test_features.columns:
             assert self.calendar_anomaly is not None, \
-                '"calendar_anomaly" column found, but names of affected features was not provided'
+                '"calendar_anomaly" column found, but no names of affected features were provided'
             idx = test_features.query('calendar_anomaly == 1').index
             test_features.loc[idx, self.calendar_anomaly] = np.nan
         return test_features

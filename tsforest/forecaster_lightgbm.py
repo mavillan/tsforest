@@ -91,9 +91,6 @@ class LightGBMForecaster(ForecasterBase):
         train_features,categorical_features = super()._prepare_train_features(train_data)
 
         if valid_period is not None:
-            assert (valid_period.ds.min() >= train_data.ds.min() and 
-                valid_period.ds.max() <= train_data.ds.max()), \
-                'valid_period must be contained in the time period of train_data'
             valid_features = super()._prepare_valid_features(valid_period, train_features)
             valid_start_time = valid_features.ds.min()
             # removes validation period from train data
