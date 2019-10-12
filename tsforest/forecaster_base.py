@@ -6,7 +6,63 @@ from tsforest.features import FeaturesGenerator
 from tsforest.trend import TrendEstimator
 from tsforest import metrics
 
+# available methods in pandas.core.window.Rolling as of pandas 0.25.1 
+AVAILABLE_RW_FUNCTIONS = ['count', 'sum', 'mean', 'median', 'var', 'std', 'min', 
+                          'max', 'corr', 'cov', 'skew', 'kurt', 'quantile']
+
 class ForecasterBase(object):
+
+    def validate_inputs(self):
+        '''
+        Validates the inputs
+        '''
+        if not isinstance(self.model_params, dict):
+            raise TypeError("Parameter 'model_params' should be of type 'dict'.")
+
+        if not isinstance(self.features, list):
+            raise TypeError("Parameter 'features' should be of type 'list'.")
+        else:
+            if any([x not in ['calendar','calendar_cyclical', 'lag', 'rw'] for x in self.features]):
+                raise ValueError("Values in 'features' should be any of: ['calendar', 'calendar_cyclical', 'lag', 'rw'].")
+        
+        if not isinstance(self._categorical_features, list):
+            raise TypeError("Parameter 'categorical_features' should be of type 'list'.")
+
+        if not isinstance(self.calendar_anomaly, bool):
+            raise TypeError("Parameter 'calendar_anomaly' should be of type 'bool'.")
+
+        if not isinstance(self.detrend, bool):
+            raise TypeError("Parameter 'detrend' should be of type 'bool'.")
+
+        if not isinstance(self.response_scaling, bool):
+            raise TypeError("Parameter 'response_scaling' should be of type 'bool'.")
+
+        if self.lags is not None:
+            if not isinstance(self.lags, list):
+                raise TypeError("Parameter 'lags' should be of type 'list'.")
+            else:
+                if any([type(x)!=int for x in self.lags]):
+                    raise ValueError("Values in 'lags' should be integers.")
+                elif any([x<1 for x in self.lags]):
+                    raise ValueError("Values in 'lags' should be integers greater or equal to 1.")
+        
+        if self.window_sizes is not None:
+            if not isinstance(self.window_sizes, list):
+                raise TypeError("Parameter 'window_sizes' should be of type 'list.")
+            else:
+                if any([type(x)!=int for x in self.window_sizes]):
+                    raise ValueError("Values in 'window_sizes' should be integers.")
+                elif any([x<1 for x in self.window_sizes]):
+                    raise ValueError("Values in 'window_sizes' should be integers greater or equal to 1.")
+        
+        if self.window_functions is not None:
+            if not isinstance(self.window_functions, list):
+                raise TypeError("Parameter 'window_functions' should be of type list.")
+            else:
+                if any([type(x)!=str for x in self.window_functions]):
+                    raise ValueError("Values in 'window_functions' should be string names.")
+                elif any([x not in AVAILABLE_RW_FUNCTIONS for x in self.window_functions]):
+                    raise ValueError(f"Values in 'window_functions' should be any of: {AVAILABLE_RW_FUNCTIONS}.")
       
     def _prepare_train_features(self, train_data):
         '''

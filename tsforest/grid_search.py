@@ -47,7 +47,7 @@ class GridSearch(object):
     '''
 
     def __init__(self, model_class, features=['calendar_mixed','events'], 
-                 categorical_features=list(), calendar_anomaly=None, 
+                 categorical_features=list(), calendar_anomaly=False, 
                  detrend=True, response_scaling=True, 
                  lags=None, window_sizes=None, window_functions=None, 
                  hyperparams=dict(), hyperparams_fixed=dict(), 
