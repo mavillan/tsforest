@@ -10,9 +10,12 @@ from tsforest import metrics
 AVAILABLE_RW_FUNCTIONS = ['count', 'sum', 'mean', 'median', 'var', 'std', 'min', 
                           'max', 'corr', 'cov', 'skew', 'kurt', 'quantile']
 
+AVAILABLE_METRICS = [member[0].split('_')[1] for member in getmembers(metrics) 
+                     if isfunction(member[1])]
+
 class ForecasterBase(object):
 
-    def validate_inputs(self):
+    def _validate_inputs(self):
         '''
         Validates the inputs
         '''
@@ -64,7 +67,7 @@ class ForecasterBase(object):
                 elif any([x not in AVAILABLE_RW_FUNCTIONS for x in self.window_functions]):
                     raise ValueError(f"Values in 'window_functions' should be any of: {AVAILABLE_RW_FUNCTIONS}.")
     
-    def validate_fit_inputs(self, train_data, valid_period):
+    def _validate_fit_inputs(self, train_data, valid_period):
         if not isinstance(train_data, pd.DataFrame):
             raise TypeError("Parameter 'train_data' should be of type pandas.DataFrame.")
         elif not ({"ds","y"} <= set(train_data.columns.values)):
@@ -75,6 +78,23 @@ class ForecasterBase(object):
                 raise TypeError("Parameter 'valid_period' should be of type pandas.DataFrame.")
             elif {"ds"} != set(valid_period.columns.values):
                 raise ValueError("'valid_period' should contain only the column 'ds'.")
+    
+    def _validate_predict_inputs(self, test_data):
+        if not isinstance(test_data, pd.DataFrame):
+            raise TypeError("Parameter 'test_data' should be of type pandas.DataFrame.")
+        elif not (set(self.train_data.columns) - set(test_data.columns) == {'y'}):
+            raise ValueError("'test_data' shoud have the same columns as 'train_data' except for 'y'.")
+    
+    def _validate_evaluate_inputs(self, eval_data, metric):
+        if not isinstance(eval_data, pd.DataFrame):
+            raise TypeError("'eval_data' should be of type pandas.DataFrame.")
+        elif not (set(self.train_data.columns) == set(eval_data.columns)):
+            raise ValueError("'test_data' should have the same columns as 'train_data'.")
+
+        if not isinstance(metric, str):
+            raise TypeError("'metric' must be of type str.")
+        elif metric not in AVAILABLE_METRICS:
+            raise ValueError(f"'metric' must be any of these: {AVAILABLE_METRICS}")
       
     def _prepare_train_features(self, train_data):
         '''
@@ -185,11 +205,11 @@ class ForecasterBase(object):
             
         return y_hat
 
-    def evaluate(self, test_data, metric='rmse'):
+    def evaluate(self, eval_data, metric='rmse'):
         '''
         Parameters
         ----------
-        test_data: pandas.DataFrame
+        eval_data: pandas.DataFrame
             dataframe with the same columns as "train_data"
         metric: string
             possible values: "mae", "mape", "mse", "rmse", "smape"
@@ -198,15 +218,10 @@ class ForecasterBase(object):
         error: float
             error of predictions according to the error measure
         '''
-        assert set(self.train_data.columns) == set(test_data.columns), \
-            '"test_data" must have the same columns as "train_data"'
-        available_metrics = [member[0].split('_')[1] for member in getmembers(metrics) 
-                             if isfunction(member[1])]
-        assert metric in available_metrics, \
-            f'"metric" must be any of these: {available_metrics}'
-        test_data = test_data.copy()
-        y_real = test_data.pop("y")
-        y_pred = self.predict(test_data)["y_pred"].values
+        self._validate_evaluate_inputs(eval_data, metric)
+        eval_data = eval_data.copy()
+        y_real = eval_data.pop("y")
+        y_pred = self.predict(eval_data)["y_pred"].values
         error_func = getattr(metrics, f'compute_{metric}')
         error = error_func(y_real, y_pred)
         return error

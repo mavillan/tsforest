@@ -53,7 +53,7 @@ class LightGBMForecaster(ForecasterBase):
         self.lags = lags
         self.window_sizes = window_sizes
         self.window_functions = window_functions
-        self.validate_inputs()
+        self._validate_inputs()
 
     def _cast_dataframe(self, features_dataframe, categorical_features):
         """
@@ -87,7 +87,7 @@ class LightGBMForecaster(ForecasterBase):
         valid_period: pandas.DataFrame
             dataframe (with column "ds") indicating the validation period
         '''
-        self.validate_fit_inputs(train_data, valid_period)
+        self._validate_fit_inputs(train_data, valid_period)
         train_features,categorical_features = super()._prepare_train_features(train_data)
 
         if valid_period is not None:
@@ -165,24 +165,22 @@ class LightGBMForecaster(ForecasterBase):
             y = np.append(y, [y_pred])
         return np.asarray(prediction).ravel()
 
-    def predict(self, test_period):
+    def predict(self, test_data):
         '''
         Parameters
         ----------
-        test_period: pandas.DataFrame
+        test_data: pandas.DataFrame
             dataframe with the same columns as "train_data" except for "y"
         Returns
         ----------
         prediction_dataframe: pandas.DataFrame
             dataframe containing dates "ds" and predictions "y_pred"
         '''
-        assert set(self.train_data.columns) - set(test_period.columns) == {'y'}, \
-            '"test_period" must have the same columns as "train_data" except for "y"'
-        
-        test_features = super()._prepare_test_features(test_period)
+        self._validate_predict_inputs(test_data)        
+        test_features = super()._prepare_test_features(test_data)
         if self.detrend:
             trend_estimator = self.trend_estimator
-            trend_dataframe = trend_estimator.predict(test_period.loc[:, ['ds']])
+            trend_dataframe = trend_estimator.predict(test_data.loc[:, ['ds']])
         else:
             trend_dataframe = None
 
@@ -202,7 +200,7 @@ class LightGBMForecaster(ForecasterBase):
 
         self.test_features = test_features
             
-        prediction_dataframe = pd.DataFrame({'ds':test_period.ds, 'y_pred':prediction})
+        prediction_dataframe = pd.DataFrame({'ds':test_data.ds, 'y_pred':prediction})
         return prediction_dataframe
 
     def show_variable_importance(self):
