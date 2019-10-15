@@ -63,6 +63,18 @@ class ForecasterBase(object):
                     raise ValueError("Values in 'window_functions' should be string names.")
                 elif any([x not in AVAILABLE_RW_FUNCTIONS for x in self.window_functions]):
                     raise ValueError(f"Values in 'window_functions' should be any of: {AVAILABLE_RW_FUNCTIONS}.")
+    
+    def validate_fit_inputs(self, train_data, valid_period):
+        if not isinstance(train_data, pd.DataFrame):
+            raise TypeError("Parameter 'train_data' should be of type pandas.DataFrame.")
+        elif not ({"ds","y"} <= set(train_data.columns.values)):
+            raise ValueError("'train_data' should contain columns 'ds' and 'y'.")
+        
+        if valid_period is not None:
+            if not isinstance(valid_period, pd.DataFrame):
+                raise TypeError("Parameter 'valid_period' should be of type pandas.DataFrame.")
+            elif {"ds"} != set(valid_period.columns.values):
+                raise ValueError("'valid_period' should contain only the column 'ds'.")
       
     def _prepare_train_features(self, train_data):
         '''

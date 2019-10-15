@@ -78,7 +78,7 @@ class LightGBMForecaster(ForecasterBase):
         features_dataframe_casted = lgb.Dataset(**dataset_params)
         return features_dataframe_casted     
 
-    def fit(self, train_data, valid_period=None, early_stopping_rounds=20):
+    def fit(self, train_data, valid_period=None):
         '''
         Parameters
         ----------
@@ -87,8 +87,7 @@ class LightGBMForecaster(ForecasterBase):
         valid_period: pandas.DataFrame
             dataframe (with column "ds") indicating the validation period
         '''
-        assert {"ds","y"} <= set(train_data.columns.values), \
-            '"train_data" must contain columns "ds" and "y"'
+        self.validate_fit_inputs(train_data, valid_period)
         train_features,categorical_features = super()._prepare_train_features(train_data)
 
         if valid_period is not None:
@@ -118,12 +117,13 @@ class LightGBMForecaster(ForecasterBase):
         # model_params overwrites default params of model
         model_params = {**lgbm_parameters, **self.model_params}
 
-        training_params = {'params':model_params,
-                           'train_set':train_features_casted}
+        training_params = {'train_set':train_features_casted}
         if valid_period is not None:
             training_params['valid_sets'] = valid_features_casted
-            training_params['early_stopping_rounds'] = early_stopping_rounds
             training_params['verbose_eval'] = False
+        elif 'early_stopping_rounds' in model_params:
+            del model_params['early_stopping_rounds']
+        training_params['params'] = model_params
 
         # model training
         model = lgb.train(**training_params)

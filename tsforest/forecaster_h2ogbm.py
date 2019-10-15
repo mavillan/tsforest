@@ -73,7 +73,7 @@ class H2OGBMForecaster(ForecasterBase):
                                                  column_types=features_types)
         return features_dataframe_casted
 
-    def fit(self, train_data, valid_period=None, early_stopping_rounds=20):
+    def fit(self, train_data, valid_period=None):
         '''
         Parameters
         ----------
@@ -82,8 +82,7 @@ class H2OGBMForecaster(ForecasterBase):
         valid_period: pandas.DataFrame
             dataframe (with column "ds") indicating the validation period
         '''
-        assert {"ds","y"} <= set(train_data.columns.values), \
-            '"train_data" must contain columns "ds" and "y"'
+        self.validate_fit_inputs(train_data, valid_period)
         train_features,categorical_features = super()._prepare_train_features(train_data)
         
         if valid_period is not None:
@@ -118,7 +117,9 @@ class H2OGBMForecaster(ForecasterBase):
                            'y':self.target}
         if valid_period is not None:
             training_params['validation_frame'] = valid_features_casted
-            model_params['stopping_rounds'] = early_stopping_rounds 
+        elif 'stopping_rounds' in model_params:
+            del model_params['stopping_rounds']
+
         if 'weight' in self.train_features.columns:
             training_params['weights_column']='weight'
 

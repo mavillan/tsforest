@@ -4,6 +4,7 @@ gbm_parameters = {
     'max_depth':5,
     'nbins':20,
     'learn_rate':0.25,
+    'stopping_rounds':30,
     'stopping_metric':'mse',
     'score_each_iteration':True,
     'categorical_encoding':'enum',
@@ -17,20 +18,23 @@ gbm_parameters = {
 lgbm_parameters = {
     'boosting_type':'gbrt',
     'objective':'regression',
+    'num_iterations':300,
     'num_leaves':31,
     'min_data_in_leaf':5,
     'learning_rate':0.25,
     'feature_fraction':1.0,
-    'num_iterations':300
+    'early_stopping_rounds':30
 }
 
+# catboost default parameters
 cat_parameters = {
     'iterations':300,
     'learning_rate':0.25,
     'l2_leaf_reg':3.0,
     'depth':6,
     'has_time':True,
-    'bootstrap_type':'No'
+    'bootstrap_type':'No',
+    'early_stopping_rounds':30
 }
 
 # fbprophet default parameters 

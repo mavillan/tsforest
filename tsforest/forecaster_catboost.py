@@ -77,7 +77,7 @@ class CatBoostForecaster(ForecasterBase):
         features_dataframe_casted = Pool(**dataset_params)
         return features_dataframe_casted  
 
-    def fit(self, train_data, valid_period=None, early_stopping_rounds=20):
+    def fit(self, train_data, valid_period=None):
         '''
         Parameters
         ----------
@@ -86,8 +86,7 @@ class CatBoostForecaster(ForecasterBase):
         valid_period: pandas.DataFrame
             dataframe (with column "ds") indicating the validation period
         '''
-        assert {"ds","y"} <= set(train_data.columns.values), \
-            '"train_data" must contain columns "ds" and "y"'
+        self.validate_fit_inputs(train_data, valid_period)
         train_features,categorical_features = super()._prepare_train_features(train_data)
 
         if valid_period is not None:
@@ -120,6 +119,8 @@ class CatBoostForecaster(ForecasterBase):
                            'verbose':False}
         if valid_period is not None:
             training_params['eval_set'] = valid_features_casted
+        elif 'early_stopping_rounds' in training_params:
+            del training_params['early_stopping_rounds']
 
         # model training
         model = CatBoostRegressor(**model_params)
