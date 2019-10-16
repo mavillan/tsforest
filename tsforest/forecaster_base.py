@@ -79,22 +79,22 @@ class ForecasterBase(object):
             elif {"ds"} != set(valid_period.columns.values):
                 raise ValueError("'valid_period' should contain only the column 'ds'.")
     
-    def _validate_predict_inputs(self, test_data):
-        if not isinstance(test_data, pd.DataFrame):
-            raise TypeError("Parameter 'test_data' should be of type pandas.DataFrame.")
-        elif not (set(self.train_data.columns) - set(test_data.columns) == {'y'}):
-            raise ValueError("'test_data' shoud have the same columns as 'train_data' except for 'y'.")
+    def _validate_predict_inputs(self, predict_data):
+        if not isinstance(predict_data, pd.DataFrame):
+            raise TypeError("Parameter 'predict_data' should be of type pandas.DataFrame.")
+        elif not (set(self.train_data.columns) - set(predict_data.columns) == {'y'}):
+            raise ValueError("'predict_data' shoud have the same columns as 'train_data' except for 'y'.")
     
     def _validate_evaluate_inputs(self, eval_data, metric):
         if not isinstance(eval_data, pd.DataFrame):
             raise TypeError("'eval_data' should be of type pandas.DataFrame.")
         elif not (set(self.train_data.columns) == set(eval_data.columns)):
-            raise ValueError("'test_data' should have the same columns as 'train_data'.")
+            raise ValueError("'eval_data' should have the same columns as 'train_data'.")
 
         if not isinstance(metric, str):
-            raise TypeError("'metric' must be of type str.")
+            raise TypeError("'metric' should be of type str.")
         elif metric not in AVAILABLE_METRICS:
-            raise ValueError(f"'metric' must be any of these: {AVAILABLE_METRICS}")
+            raise ValueError(f"'metric' should be any of these: {AVAILABLE_METRICS}")
       
     def _prepare_train_features(self, train_data):
         '''
@@ -136,25 +136,26 @@ class ForecasterBase(object):
             'none of the dates in valid_period are in train_features'
         return valid_features
 
-    def _prepare_test_features(self, test_period):
+    def _prepare_predict_features(self, predict_data):
         '''
         Parameters
         ----------
-        test_data: pandas.DataFrame
-            dataframe with the same columns as self.train_data (except for "y") 
-            containing the test period
+        predict_data: pandas.DataFrame
+            Dataframe with the same columns as self.train_data (except for "y") 
+            containing the prediction period.
         Returns
         ----------
-        test_features: pandas.DataFrame
-            Dataframe containing all the features for evaluating the trained model
+        predict_features: pandas.DataFrame
+            Dataframe containing all the features for making predictions with 
+            the trained model.
         '''
-        test_features,_ = self.features_generator.compute_test_features(test_period)
-        if 'calendar_anomaly' in test_features.columns:
+        predict_features,_ = self.features_generator.compute_predict_features(predict_data)
+        if 'calendar_anomaly' in predict_features.columns:
             assert self.calendar_anomaly is not None, \
                 '"calendar_anomaly" column found, but no names of affected features were provided'
-            idx = test_features.query('calendar_anomaly == 1').index
-            test_features.loc[idx, self.calendar_anomaly] = np.nan
-        return test_features
+            idx = predict_features.query('calendar_anomaly == 1').index
+            predict_features.loc[idx, self.calendar_anomaly] = np.nan
+        return predict_features
     
     def _prepare_train_response(self, train_features):
         '''

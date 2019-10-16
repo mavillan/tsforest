@@ -129,16 +129,16 @@ class H2OGBMForecaster(ForecasterBase):
         self.model = model
         self.best_iteration = int(model.summary()["number_of_trees"][0])
 
-    def _predict(self, model, test_features, trend_dataframe):
+    def _predict(self, model, predict_features, trend_dataframe):
         """
         Parameters
         ----------
-        model: LightGBM 
-            Trained model
-        test_features: pandas.DataFrame
-            datafame containing the features for the test period
+        model: h2o.estimators.H2OGradientBoostingEstimator 
+            Trained H2OGradientBoostingEstimator model.
+        predict_features: pandas.DataFrame
+            Datafame containing the features for the prediction period.
         trend_dataframe: pandas.DataFrame
-            dataframe containing the trend estimation over the test period
+            Dataframe containing the trend estimation over the prediction period.
         """
         y_train = self.train_features.y.values
         y_valid = self.valid_features.y.values \
@@ -146,17 +146,17 @@ class H2OGBMForecaster(ForecasterBase):
         y = np.concatenate([y_train, y_valid])
 
         prediction = list()
-        for idx in range(test_features.shape[0]):
+        for idx in range(predict_features.shape[0]):
             if 'lag' in self.features:
                 for lag in self.lags:
-                    test_features.loc[idx, f'lag_{lag}'] = y[-lag]
+                    predict_features.loc[idx, f'lag_{lag}'] = y[-lag]
             if 'rw' in self.features:
                 for window_func in self.window_functions:
                     for window in self.window_sizes:
-                        test_features.loc[idx, f'{window_func}_{window}'] = getattr(np, window_func)(y[-window:])
-            test_features_casted = self._cast_dataframe(test_features.loc[[idx], :], 
+                        predict_features.loc[idx, f'{window_func}_{window}'] = getattr(np, window_func)(y[-window:])
+            predict_features_casted = self._cast_dataframe(predict_features.loc[[idx], :], 
                                                         self.categorical_features)
-            _y_pred = model.predict(test_features_casted)
+            _y_pred = model.predict(predict_features_casted)
             y_pred = _y_pred.as_data_frame().values[:,0]
             prediction.append(y_pred.copy())
             if self.response_scaling:
@@ -167,31 +167,32 @@ class H2OGBMForecaster(ForecasterBase):
             y = np.append(y, [y_pred])
         return np.asarray(prediction).ravel()
 
-    def predict(self, test_data):
+    def predict(self, predict_data):
         '''
         Parameters
         ----------
-        test_data: pandas.DataFrame
-            dataframe with the same columns as "train_data" except for "y"
+        predict_data: pandas.DataFrame
+            Datafame containing the features for the prediction period.
+            Contains the same columns as "train_data" except for "y".
         Returns
         ----------
         prediction_dataframe: pandas.DataFrame
             dataframe containing dates "ds" and predictions "y_pred"
         '''
-        self._validate_predict_inputs(test_data) 
-        test_features = super()._prepare_test_features(test_data)
+        self._validate_predict_inputs(predict_data) 
+        predict_features = super()._prepare_predict_features(predict_data)
         if self.detrend:
             trend_estimator = self.trend_estimator
-            trend_dataframe = trend_estimator.predict(test_data.loc[:, ['ds']])
+            trend_dataframe = trend_estimator.predict(predict_data.loc[:, ['ds']])
         else:
             trend_dataframe = None
 
         if 'lag' in self.features or 'rw' in self.features:
-            prediction = self._predict(self.model, test_features, trend_dataframe)
+            prediction = self._predict(self.model, predict_features, trend_dataframe)
         else:
-            test_features_casted = self._cast_dataframe(test_features, 
+            predict_features_casted = self._cast_dataframe(predict_features, 
                                                         self.categorical_features)
-            _prediction = self.model.predict(test_features_casted)
+            _prediction = self.model.predict(predict_features_casted)
             prediction = _prediction.as_data_frame().values[:,0]
 
         if self.response_scaling:
@@ -199,13 +200,13 @@ class H2OGBMForecaster(ForecasterBase):
             prediction += self.y_mean
         if self.detrend:
             prediction += trend_dataframe.trend.values
-        if "zero_response" in test_features.columns:
-            zero_response_mask = test_features['zero_response']==1
+        if "zero_response" in predict_features.columns:
+            zero_response_mask = predict_features['zero_response']==1
             prediction[zero_response_mask] = 0
         
-        self.test_features = test_features
+        self.predict_features = predict_features
             
-        prediction_dataframe = pd.DataFrame({"ds":test_data.ds, "y_pred":prediction})
+        prediction_dataframe = pd.DataFrame({"ds":predict_data.ds, "y_pred":prediction})
         return prediction_dataframe
 
     def show_variable_importance(self):

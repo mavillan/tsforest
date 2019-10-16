@@ -175,14 +175,14 @@ class FeaturesGenerator():
                                 if feature in all_features.columns and dtype=='categorical']
         return all_features,categorical_features
         
-    def compute_test_features(self, data):
+    def compute_predict_features(self, data):
         """
         Parameters
         ----------
         data: pandas.DataFrame
             Dataframe with (at least) column: 'ds'
         """
-        self.test_data = data
+        self.predict_data = data
 
         # list with all the dataframes of features
         all_features_list = list()

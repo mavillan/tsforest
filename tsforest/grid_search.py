@@ -5,7 +5,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 
-def fit_evaluate(model_class, model_config, model_params, train_data, valid_period, test_data, metric):
+def fit_evaluate(model_class, model_config, model_params, train_data, valid_period, eval_data, metric):
     '''
     Parameters
     ----------
@@ -14,8 +14,8 @@ def fit_evaluate(model_class, model_config, model_params, train_data, valid_peri
     '''
     model = model_class(model_params=model_params, **model_config)
     model.fit(train_data, valid_period)
-    error = model.evaluate(test_data, metric=metric)
-    error = 100*error/test_data.y.mean()
+    error = model.evaluate(eval_data, metric=metric)
+    error = 100*error/eval_data.y.mean()
     return (model_params, model.best_iteration, error)
 
 class GridSearch(object):
@@ -65,18 +65,18 @@ class GridSearch(object):
         self.hyperparams_fixed = hyperparams_fixed
         self.n_jobs = n_jobs
 
-    def fit(self, train_data, valid_period=None, test_data=None, metric='rmse'):
+    def fit(self, train_data, valid_period=None, eval_data=None, metric='rmse'):
         '''
         Parameters
         ----------
         train_data : pandas.DataFrame
-            dataframe with at least columns "ds" and "y"
-        valid_period: pandas.Series or pandas.DataFrame
-            series or dataframe (with column "ds") indicating the validation period
-        test_data : pandas.Series or pandas.DataFrame
-            dataframe with the same columns as "train_data" over the test period
+            Dataframe with at least columns "ds" and "y".
+        valid_period: pandas.DataFrame
+            Dataframe (with column "ds") indicating the validation period.
+        eval_data : pandas.DataFrame
+            Dataframe with the same columns as "train_data" over the prediction period.
         metric: string
-            name of the error metric to be measured
+            Name of the error metric to be used.
         Returns
         ----------
         '''
@@ -88,10 +88,10 @@ class GridSearch(object):
         hyperparams_list = [{**hyperparams, **hyperparams_fixed} 
                             for hyperparams in _hyperparams_list]
 
-        if (valid_period is None) and (test_data is None):
-            test_data = train_data.loc[:, ['ds','y']]
-        elif test_data is None:
-            test_data = pd.merge(train_data, valid_period, how='inner', on=['ds'])
+        if (valid_period is None) and (eval_data is None):
+            eval_data = train_data.loc[:, ['ds','y']]
+        elif eval_data is None:
+            eval_data = pd.merge(train_data, valid_period, how='inner', on=['ds'])
 
         # parallel fit & evaluation of model on hyperparams
         model_config = {'features':self.features,
@@ -106,7 +106,7 @@ class GridSearch(object):
                   'model_config':model_config,
                   'train_data':train_data,
                   'valid_period':valid_period,
-                  'test_data':test_data,
+                  'eval_data':eval_data,
                   'metric':metric}
         
         with Parallel(n_jobs=self.n_jobs) as parallel:
