@@ -26,10 +26,10 @@ class TestGridSearch(unittest.TestCase):
                 n_jobs=-1)
         gs.fit(train_data=train_data, valid_period=valid_period)
 
-    def test_it_fit_with_test_data_in_lightgbm(self):
+    def test_it_fit_with_eval_data_in_lightgbm(self):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         train_data = data.query('ds < "2019-06-01"')
-        test_data = data.query('ds >= "2019-06-01"')
+        eval_data = data.query('ds >= "2019-06-01"')
         hyperparams = {'num_leaves':[25,30]}
         hyperparams_fixed = {'num_iterations':30, 'learning_rate':0.3}
         
@@ -38,7 +38,7 @@ class TestGridSearch(unittest.TestCase):
                 hyperparams=hyperparams,
                 hyperparams_fixed=hyperparams_fixed,
                 n_jobs=-1)
-        gs.fit(data, test_data=test_data)
+        gs.fit(train_data=data, eval_data=eval_data)
 
     def test_it_fit_with_valid_period_in_h2ogbm(self):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
@@ -54,10 +54,10 @@ class TestGridSearch(unittest.TestCase):
                 n_jobs=-1)
         gs.fit(train_data=train_data, valid_period=valid_period)
 
-    def test_it_fit_with_test_data_in_h2ogbm(self):
+    def test_it_fit_with_eval_data_in_h2ogbm(self):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         train_data = data.query('ds < "2019-06-01"')
-        test_data = data.query('ds >= "2019-06-01"')
+        eval_data = data.query('ds >= "2019-06-01"')
         hyperparams = {'max_depth':[5,7]}
         hyperparams_fixed = {'ntrees':30, 'learn_rate':0.3}
 
@@ -66,7 +66,7 @@ class TestGridSearch(unittest.TestCase):
                 hyperparams=hyperparams,
                 hyperparams_fixed=hyperparams_fixed,
                 n_jobs=-1)
-        gs.fit(train_data=train_data, test_data=test_data)
+        gs.fit(train_data=data, eval_data=eval_data)
 
     def test_it_fit_with_valid_period_in_catboost(self):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
@@ -82,10 +82,10 @@ class TestGridSearch(unittest.TestCase):
                 n_jobs=-1)
         gs.fit(train_data=train_data, valid_period=valid_period)
 
-    def test_it_fit_with_test_data_in_catboost(self):
+    def test_it_fit_with_eval_data_in_catboost(self):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
         train_data = data.query('ds < "2019-06-01"')
-        test_data = data.query('ds >= "2019-06-01"')
+        eval_data = data.query('ds >= "2019-06-01"')
         hyperparams = {'depth':[5,6]}
         hyperparams_fixed = {'iterations':30, 'learning_rate':0.3}
         
@@ -94,4 +94,4 @@ class TestGridSearch(unittest.TestCase):
                 hyperparams=hyperparams,
                 hyperparams_fixed=hyperparams_fixed,
                 n_jobs=-1)
-        gs.fit(data, test_data=test_data)
+        gs.fit(train_data=data, eval_data=eval_data)

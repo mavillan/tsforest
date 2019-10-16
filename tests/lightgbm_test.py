@@ -51,28 +51,28 @@ class TestLightGMB(unittest.TestCase):
 
     def test_it_fit_predict(self):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
-        test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
+        predict_data = make_time_range('2019-07-01', '2019-07-31', freq='D')
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
                                      features=['calendar', 'calendar_cyclical'])
         fcaster.fit(train_data=data)
-        prediction_dataframe = fcaster.predict(test_period)
+        prediction_dataframe = fcaster.predict(predict_data)
 
     def test_it_fit_predict_with_lag_features(self):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
-        test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
+        predict_data = make_time_range('2019-07-01', '2019-07-31', freq='D')
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
                                      features=['calendar', 'calendar_cyclical','lag'],
                                      lags=[1,2,3,4,5,6,7])
         fcaster.fit(train_data=data)
-        prediction_dataframe = fcaster.predict(test_period)
+        prediction_dataframe = fcaster.predict(predict_data)
 
     def test_it_fit_predict_with_rw_features(self):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
-        test_period = make_time_range('2019-07-01', '2019-07-31', freq='D')
+        predict_data = make_time_range('2019-07-01', '2019-07-31', freq='D')
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
                                                    'learning_rate':0.3}, 
@@ -80,7 +80,7 @@ class TestLightGMB(unittest.TestCase):
                                      window_functions=['mean','median','min','max','sum'],
                                      window_sizes=[7,14,21,28])
         fcaster.fit(train_data=data)
-        prediction_dataframe = fcaster.predict(test_period)
+        prediction_dataframe = fcaster.predict(predict_data)
 
     def test_it_fit_evaluate(self):
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
