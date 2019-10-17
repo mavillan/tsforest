@@ -1,17 +1,17 @@
 import itertools
 import pandas as pd
-pd.set_option('display.max_colwidth', -1)
+pd.set_option("display.max_colwidth", -1)
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
 
 def fit_evaluate(model_class, model_config, model_params, train_data, valid_period, eval_data, metric):
-    '''
+    """
     Parameters
     ----------
     model_class_path: tuple
         Class path of the model: (module_name, class_name)
-    '''
+    """
     model = model_class(model_params=model_params, **model_config)
     model.fit(train_data, valid_period)
     error = model.evaluate(eval_data, metric=metric)
@@ -19,7 +19,7 @@ def fit_evaluate(model_class, model_config, model_params, train_data, valid_peri
     return (model_params, model.best_iteration, error)
 
 class GridSearch(object):
-    '''
+    """
     model_class: Class
         class of the model to be instantiated
     features: list
@@ -39,14 +39,14 @@ class GridSearch(object):
     window_functions: list
         List of string names of the window functions
     hyperparams: dict
-        dictionary of hyperparameters in the form: "parameter_name" : [param_value,]
+        dictionary of hyperparameters in the form: 'parameter_name':[param_value,].
     hyperparams_fixed: dict
-        dictionary of fixed hyperparameters in the form: {"param_name" : "param_value",}
+        dictionary of fixed hyperparameters in the form: {'param_name':'param_value',}.
     n_jobs: int
         number of parallel jobs to run on grid search
-    '''
+    """
 
-    def __init__(self, model_class, features=['calendar_mixed','events'], 
+    def __init__(self, model_class, features=["calendar_mixed", "events"], 
                  categorical_features=list(), calendar_anomaly=False, 
                  detrend=True, response_scaling=True, 
                  lags=None, window_sizes=None, window_functions=None, 
@@ -65,21 +65,21 @@ class GridSearch(object):
         self.hyperparams_fixed = hyperparams_fixed
         self.n_jobs = n_jobs
 
-    def fit(self, train_data, valid_period=None, eval_data=None, metric='rmse'):
-        '''
+    def fit(self, train_data, valid_period=None, eval_data=None, metric="rmse"):
+        """
         Parameters
         ----------
         train_data : pandas.DataFrame
-            Dataframe with at least columns "ds" and "y".
+            Dataframe with at least columns 'ds' and 'y'.
         valid_period: pandas.DataFrame
-            Dataframe (with column "ds") indicating the validation period.
+            Dataframe (with column 'ds') indicating the validation period.
         eval_data : pandas.DataFrame
-            Dataframe with the same columns as "train_data" over the prediction period.
+            Dataframe with the same columns as 'train_data' over the prediction period.
         metric: string
             Name of the error metric to be used.
         Returns
         ----------
-        '''
+        """
         params_names = self.hyperparams.keys()
         params_values = self.hyperparams.values()
         hyperparams_fixed = self.hyperparams_fixed
@@ -89,25 +89,25 @@ class GridSearch(object):
                             for hyperparams in _hyperparams_list]
 
         if (valid_period is None) and (eval_data is None):
-            eval_data = train_data.loc[:, ['ds','y']]
+            eval_data = train_data.loc[:, ["ds", "y"]]
         elif eval_data is None:
-            eval_data = pd.merge(train_data, valid_period, how='inner', on=['ds'])
+            eval_data = pd.merge(train_data, valid_period, how="inner", on=["ds"])
 
         # parallel fit & evaluation of model on hyperparams
-        model_config = {'features':self.features,
-                        'categorical_features':self.categorical_features,
-                        'calendar_anomaly':self.calendar_anomaly,
-                        'detrend':self.detrend,
-                        'response_scaling':self.response_scaling,
-                        'lags':self.lags,
-                        'window_sizes':self.window_sizes,
-                        'window_functions':self.window_functions}
-        kwargs = {'model_class':self.model_class,
-                  'model_config':model_config,
-                  'train_data':train_data,
-                  'valid_period':valid_period,
-                  'eval_data':eval_data,
-                  'metric':metric}
+        model_config = {"features":self.features,
+                        "categorical_features":self.categorical_features,
+                        "calendar_anomaly":self.calendar_anomaly,
+                        "detrend":self.detrend,
+                        "response_scaling":self.response_scaling,
+                        "lags":self.lags,
+                        "window_sizes":self.window_sizes,
+                        "window_functions":self.window_functions}
+        kwargs = {"model_class":self.model_class,
+                  "model_config":model_config,
+                  "train_data":train_data,
+                  "valid_period":valid_period,
+                  "eval_data":eval_data,
+                  "metric":metric}
         
         with Parallel(n_jobs=self.n_jobs) as parallel:
             delayed_func = delayed(fit_evaluate)
@@ -122,26 +122,25 @@ class GridSearch(object):
         # sort the results by error
         results.sort(key = lambda x: x[-1])
         results_dataframe = pd.DataFrame([(r[0],r[1],r[2]) for r in results],
-                                columns=["hyperparams","best_iteration","error"])
+                                         columns=["hyperparams", "best_iteration", "error"])
         self.results = results
         self.results_dataframe = results_dataframe
         
     def get_grid(self, top_n=10):
-        '''
+        """
         Parameters
         ----------
         top_n: int
             number of best parameters to return
-        '''
+        """
         return self.results_dataframe.head(top_n)
 
     def get_best_params(self, top_n=1):
-        '''
+        """
         Parameters
         ----------
         top_n: int
             number of best parameters to return
-        '''
-        assert top_n <= len(self.results), \
-            '"top_n" cannot be greater that the grid size'
+        """
+        assert top_n <= len(self.results), "'top_n' cannot be greater that the grid size"
         return [self.results[i][0] for i in range(top_n)]

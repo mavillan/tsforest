@@ -1,5 +1,5 @@
 import warnings
-warnings.simplefilter(action='ignore', category=UserWarning)
+warnings.simplefilter(action="ignore", category=UserWarning)
 
 import numpy as np
 import pandas as pd
@@ -13,7 +13,7 @@ from tsforest.forecaster_interface import ForecasterInterface
 
 @implementer(ForecasterInterface)
 class LightGBMForecaster(ForecasterBase):
-    '''
+    """
     Parameters
     ----------
     model_params : dict
@@ -34,15 +34,15 @@ class LightGBMForecaster(ForecasterBase):
         List of integer window sizes values
     window_functions: list
         List of string names of the window functions
-    '''
-    def __init__(self, model_params=dict(), features=['calendar', 'calendar_cyclical'], 
+    """
+    def __init__(self, model_params=dict(), features=["calendar", "calendar_cyclical"], 
                  categorical_features=list(), calendar_anomaly=False, detrend=True, 
                  response_scaling=False, lags=None, window_sizes=None, window_functions=None):
 
-        if lags is not None and 'lag' not in features:
-            features.append('lag')
-        if (window_sizes is not None and window_functions is not None) and 'rw' not in features:
-            features.append('rw')
+        if lags is not None and "lag" not in features:
+            features.append("lag")
+        if (window_sizes is not None and window_functions is not None) and "rw" not in features:
+            features.append("rw")
 
         self.model_params = model_params
         self.features = features
@@ -68,25 +68,25 @@ class LightGBMForecaster(ForecasterBase):
         features_dataframe_casted: lightgbm.basic.Dataset
             features dataframe casted to LightGBM dataframe format
         """
-        dataset_params = {'data':features_dataframe.loc[:, self.input_features],
-                          'categorical_feature':categorical_features,
-                          'free_raw_data':False}
-        if 'weight' in features_dataframe.columns:
-            dataset_params['weight'] = features_dataframe.loc[:, 'weight']
+        dataset_params = {"data":features_dataframe.loc[:, self.input_features],
+                          "categorical_feature":categorical_features,
+                          "free_raw_data":False}
+        if "weight" in features_dataframe.columns:
+            dataset_params["weight"] = features_dataframe.loc[:, "weight"]
         if self.target in features_dataframe.columns:
-            dataset_params['label'] = features_dataframe.loc[:, self.target]
+            dataset_params["label"] = features_dataframe.loc[:, self.target]
         features_dataframe_casted = lgb.Dataset(**dataset_params)
         return features_dataframe_casted     
 
     def fit(self, train_data, valid_period=None):
-        '''
+        """
         Parameters
         ----------
         train_data : pandas.DataFrame
-            dataframe with "at least" columns "ds" and "y"
+            Dataframe with at least columns 'ds' and 'y'.
         valid_period: pandas.DataFrame
-            dataframe (with column "ds") indicating the validation period
-        '''
+            Dataframe (with column 'ds') indicating the validation period.
+        """
         self._validate_fit_inputs(train_data, valid_period)
         train_features,categorical_features = super()._prepare_train_features(train_data)
 
@@ -94,12 +94,12 @@ class LightGBMForecaster(ForecasterBase):
             valid_features = super()._prepare_valid_features(valid_period, train_features)
             valid_start_time = valid_features.ds.min()
             # removes validation period from train data
-            train_data = train_data.query('ds < @valid_start_time')
-            train_features = train_features.query('ds < @valid_start_time')
+            train_data = train_data.query("ds < @valid_start_time")
+            train_features = train_features.query("ds < @valid_start_time")
         
-        train_features['y_hat'] = super()._prepare_train_response(train_features)
+        train_features["y_hat"] = super()._prepare_train_response(train_features)
         if valid_period is not None:
-            valid_features['y_hat'] = super()._prepare_valid_response(valid_features)
+            valid_features["y_hat"] = super()._prepare_valid_response(valid_features)
         
         train_features_casted = self._cast_dataframe(train_features, categorical_features)
         valid_features_casted = self._cast_dataframe(valid_features, categorical_features) \
@@ -117,13 +117,13 @@ class LightGBMForecaster(ForecasterBase):
         # model_params overwrites default params of model
         model_params = {**lgbm_parameters, **self.model_params}
 
-        training_params = {'train_set':train_features_casted}
+        training_params = {"train_set":train_features_casted}
         if valid_period is not None:
-            training_params['valid_sets'] = valid_features_casted
-            training_params['verbose_eval'] = False
-        elif 'early_stopping_rounds' in model_params:
-            del model_params['early_stopping_rounds']
-        training_params['params'] = model_params
+            training_params["valid_sets"] = valid_features_casted
+            training_params["verbose_eval"] = False
+        elif "early_stopping_rounds" in model_params:
+            del model_params["early_stopping_rounds"]
+        training_params["params"] = model_params
 
         # model training
         model = lgb.train(**training_params)
@@ -148,44 +148,44 @@ class LightGBMForecaster(ForecasterBase):
 
         prediction = list()
         for idx in range(predict_features.shape[0]):
-            if 'lag' in self.features:
+            if "lag" in self.features:
                 for lag in self.lags:
-                    predict_features.loc[idx, f'lag_{lag}'] = y[-lag]
-            if 'rw' in self.features:
+                    predict_features.loc[idx, f"lag_{lag}"] = y[-lag]
+            if "rw" in self.features:
                 for window_func in self.window_functions:
                     for window in self.window_sizes:
-                        predict_features.loc[idx, f'{window_func}_{window}'] = getattr(np, window_func)(y[-window:])
+                        predict_features.loc[idx, f"{window_func}_{window}"] = getattr(np, window_func)(y[-window:])
             y_pred = model.predict(predict_features.loc[[idx], self.input_features])
             prediction.append(y_pred.copy())
             if self.response_scaling:
                 y_pred *= self.y_std
                 y_pred += self.y_mean
             if self.detrend:
-                y_pred += trend_dataframe.loc[idx, 'trend']
+                y_pred += trend_dataframe.loc[idx, "trend"]
             y = np.append(y, [y_pred])
         return np.asarray(prediction).ravel()
 
     def predict(self, predict_data):
-        '''
+        """
         Parameters
         ----------
         predict_data: pandas.DataFrame
             Datafame containing the features for the prediction period.
-            Contains the same columns as "train_data" except for "y".
+            Contains the same columns as 'train_data' except for 'y'.
         Returns
         ----------
         prediction_dataframe: pandas.DataFrame
-            dataframe containing dates "ds" and predictions "y_pred"
-        '''
+            dataframe containing dates 'ds' and predictions 'y_pred'
+        """
         self._validate_predict_inputs(predict_data)        
         predict_features = super()._prepare_predict_features(predict_data)
         if self.detrend:
             trend_estimator = self.trend_estimator
-            trend_dataframe = trend_estimator.predict(predict_data.loc[:, ['ds']])
+            trend_dataframe = trend_estimator.predict(predict_data.loc[:, ["ds"]])
         else:
             trend_dataframe = None
 
-        if 'lag' in self.features or 'rw' in self.features:
+        if "lag" in self.features or "rw" in self.features:
             prediction = self._predict(self.model, predict_features, trend_dataframe)
         else:
             prediction = self.model.predict(predict_features.loc[:, self.input_features])
@@ -195,13 +195,13 @@ class LightGBMForecaster(ForecasterBase):
             prediction += self.y_mean
         if self.detrend:
             prediction += trend_dataframe.trend.values
-        if 'zero_response' in predict_features.columns:
-            zero_response_mask = predict_features['zero_response']==1
+        if "zero_response" in predict_features.columns:
+            zero_response_mask = predict_features["zero_response"]==1
             prediction[zero_response_mask] = 0
 
         self.predict_features = predict_features
             
-        prediction_dataframe = pd.DataFrame({'ds':predict_data.ds, 'y_pred':prediction})
+        prediction_dataframe = pd.DataFrame({"ds":predict_data.ds, "y_pred":prediction})
         return prediction_dataframe
 
     def show_variable_importance(self):

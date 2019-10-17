@@ -13,10 +13,9 @@ from tsforest.config import prophet_kwargs,prophet_kwargs_extra
 
 import warnings
 warnings.filterwarnings("ignore", message="invalid value encountered in subtract")
-warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action="ignore", category=FutureWarning)
 import logging
 logging.getLogger("fbprophet").setLevel(logging.WARNING)
-
 
 def moving_average(data, window_size):
     """ 
@@ -31,7 +30,7 @@ def moving_average(data, window_size):
             np.ndarray of linear convolution
     """
     window = np.ones(int(window_size))/float(window_size)
-    return np.convolve(data, window, 'same')
+    return np.convolve(data, window, "same")
 
 def anomaly_detector(y, window_size=10, sigma=2.0):
     """ 
@@ -47,8 +46,8 @@ def anomaly_detector(y, window_size=10, sigma=2.0):
         value for standard deviation
     Returns
     --------
-    a dict (dict of 'standard_deviation': int, 'anomalies_dict': (index: value))
-    containing information about the points indentified as anomalies
+        Dictionary {'standard_deviation': int, 'anomalies_dict': (index: value)}
+        containing information about the points indentified as anomalies
     """
     avg = moving_average(y, window_size)
     avg_list = avg.tolist()
@@ -68,7 +67,7 @@ def ts_cleaning(df):
     Parameters
     -----------
     df: pd.DataFrame
-        Dataframe with columns "ds" and "y" containing the TS
+        Dataframe with columns 'ds' and 'y' containing the TS
     Returns
     -----------
     pd.Dataframe
@@ -104,7 +103,7 @@ def train_model(df, kwargs=None, kwargs_extra=None, ts_preproc=True):
                                           fourier_order=kwargs_extra["wk_fourier_order"],
                                           prior_scale=kwargs_extra["wk_prior_scale"])
         if "mt_prior_scale" in kwargs_extra:
-            prophet_model.add_seasonality(name='monthly', period=30.5, 
+            prophet_model.add_seasonality(name="monthly", period=30.5, 
                                           fourier_order=kwargs_extra["mt_fourier_order"],
                                           prior_scale=kwargs_extra["mt_prior_scale"])
         if "yr_prior_scale" in kwargs_extra:
@@ -136,7 +135,7 @@ def compute_stl_trend(data, n_periods=0):
     Returns
     ----------
     pd.DataFrame
-        A dataframe with columns "ds" and "trend" with the trend
+        A dataframe with columns 'ds' and 'trend' with the trend
         estimation and projection
     """
     # training data in the format of STL
@@ -155,9 +154,9 @@ def compute_stl_trend(data, n_periods=0):
     # trend estimation with stl
     stl = decompose(data_filled, period=7)
     stl_trend = stl.trend
-    stl_trend.rename(columns={'y':'trend'}, inplace=True)
+    stl_trend.rename(columns={"y":"trend"}, inplace=True)
     stl_fcst = forecast(stl, steps=n_periods, fc_func=drift)
-    stl_fcst.rename(columns={'drift':'trend'}, inplace=True)
+    stl_fcst.rename(columns={"drift":"trend"}, inplace=True)
     stl_trend = stl_trend.append(stl_fcst)
 
     # just keeping dates with dates in data frame
@@ -166,16 +165,15 @@ def compute_stl_trend(data, n_periods=0):
     stl_trend.reset_index(inplace=True, drop=True)
     return stl_trend
 
-
 class TrendEstimator():
     """
     Parameters
     ----------
     backend: string
-        name of the backend to be used: ('prophet', ...)
+        Name of the backend to be used: 'prophet' or 'stl'.
     """
 
-    def __init__(self, backend='prophet'):
+    def __init__(self, backend="prophet"):
         self.backend = backend
 
     def fit(self, data):
@@ -183,12 +181,9 @@ class TrendEstimator():
         Parameters
         ----------
         data: pandas.DataFrame
-            dataframe with columns 'ds' and 'y'
+            Dataframe with columns 'ds' and 'y'.
         """
-        trend_estimator = train_model(data,
-                            prophet_kwargs, 
-                            prophet_kwargs_extra, 
-                            ts_preproc=True)
+        trend_estimator = train_model(data, prophet_kwargs, prophet_kwargs_extra, ts_preproc=True)
         self.trend_estimator = trend_estimator
 
     def predict(self, predict_period):
@@ -196,11 +191,10 @@ class TrendEstimator():
         Parameters
         ----------
         predict_period: pandas.DataFrame
-            dataframe with column 'ds' containing the time period to be predicted
+            Dataframe with column 'ds' containing the time period to be predicted.
         """
         # evaluate over the data_time_range period
-        if self.backend == 'prophet':
+        if self.backend == "prophet":
             trend = compute_prophet_trend(self.trend_estimator, future_dataframe=predict_period)
-            trend_dataframe = pd.DataFrame({'ds':predict_period.ds.values, 'trend':trend.values})
+            trend_dataframe = pd.DataFrame({"ds":predict_period.ds.values, "trend":trend.values})
         return trend_dataframe
-

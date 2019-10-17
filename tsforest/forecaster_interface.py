@@ -19,7 +19,7 @@ class ForecasterInterface(Interface):
     def predict(self, test_data):
         pass
 
-    def evaluate(self, test_data, metric='rmse'):
+    def evaluate(self, test_data, metric="rmse"):
         pass
 
     def show_variable_importance(self):
