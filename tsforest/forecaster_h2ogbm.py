@@ -12,48 +12,6 @@ from tsforest.forecaster_interface import ForecasterInterface
 
 @implementer(ForecasterInterface)
 class H2OGBMForecaster(ForecasterBase):
-    """
-    Parameters
-    ----------
-    model_params : dict
-        Dictionary containing the specific parameters of the boosting model 
-    features: list
-        List of features to be included
-    categorical_features: list
-        List of names of categorical features
-    calendar_anomaly: list
-        List of names of calendar features affected by an anomaly 
-    detrend: bool
-        Whether or not to remove the trend from time serie
-    response_scaling:
-        Whether or not to perform scaling of the reponse variable
-    lags: list
-        List of integer lag values
-    window_sizes: list
-        List of integer window sizes values
-    window_functions: list
-        List of string names of the window functions
-    """
-    def __init__(self, model_params=dict(), features=["calendar", "calendar_cylical"], 
-                 categorical_features=list(), categorical_encoding="default", calendar_anomaly=False, 
-                 detrend=True, response_scaling=False, lags=None, window_sizes=None, window_functions=None):
-
-        if lags is not None and "lag" not in features:
-            features.append("lag")
-        if (window_sizes is not None and window_functions is not None) and "rw" not in features:
-            features.append("rw")
-
-        self.model_params = model_params
-        self.features = features
-        self._categorical_features = categorical_features
-        self.categorical_encoding = categorical_encoding
-        self.calendar_anomaly = calendar_anomaly
-        self.detrend = detrend
-        self.response_scaling = response_scaling
-        self.lags = lags
-        self.window_sizes = window_sizes
-        self.window_functions = window_functions
-        self._validate_inputs()
 
     def _cast_dataframe(self, features_dataframe, categorical_features):
         """
@@ -75,44 +33,12 @@ class H2OGBMForecaster(ForecasterBase):
         return features_dataframe_casted
 
     def fit(self, train_data, valid_period=None):
-        """
-        Parameters
-        ----------
-        train_data : pandas.DataFrame
-            dataframe with at least columns 'ds' and 'y'
-        valid_period: pandas.DataFrame
-            dataframe (with column 'ds') indicating the validation period
-        """
-        self._validate_fit_inputs(train_data, valid_period)
-        train_features,categorical_features = super()._prepare_train_features(train_data)
-        
-        if valid_period is not None:
-            valid_features = super()._prepare_valid_features(valid_period, train_features)
-            valid_start_time = valid_features.ds.min()
-            # removes validation period from train data
-            train_data = train_data.query("ds < @valid_start_time")
-            train_features = train_features.query("ds < @valid_start_time")
-
-        train_features["y_hat"] = super()._prepare_train_response(train_features)
-        if valid_period is not None:
-            valid_features["y_hat"] = super()._prepare_valid_response(valid_features)
-
-        train_features_casted = self._cast_dataframe(train_features, categorical_features)
-        valid_features_casted = self._cast_dataframe(valid_features, categorical_features) \
+        train_features,valid_features = super()._prepare_features(train_data, valid_period)
+        train_features_casted = self._cast_dataframe(train_features, self.categorical_features)
+        valid_features_casted = self._cast_dataframe(valid_features, self.categorical_features) \
                                 if valid_period is not None else None
-
-        self.train_data = train_data
-        self.categorical_features = categorical_features
-        self.train_features = train_features
-        self.train_features_casted = train_features_casted
-
-        self.valid_period = valid_period
-        self.valid_features = valid_features if valid_period is not None else None
-        self.valid_features_casted = valid_features_casted
-
         # model_params overwrites default params of model
         model_params = {**gbm_parameters, **self.model_params}
-
         training_params = {"training_frame":train_features_casted, 
                            "x":self.input_features, 
                            "y":self.target}
@@ -120,10 +46,8 @@ class H2OGBMForecaster(ForecasterBase):
             training_params["validation_frame"] = valid_features_casted
         elif "stopping_rounds" in model_params:
             del model_params["stopping_rounds"]
-
         if "weight" in self.train_features.columns:
             training_params["weights_column"] = "weight"
-
         # model training
         model = H2OGradientBoostingEstimator(**model_params)
         model.train(**training_params)

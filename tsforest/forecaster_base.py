@@ -15,6 +15,50 @@ AVAILABLE_METRICS = [member[0].split('_')[1] for member in getmembers(metrics)
                      if isfunction(member[1])]
 
 class ForecasterBase(object):
+    """
+    Parameters
+    ----------
+    model_params : dict
+        Dictionary containing the parameters of the specific boosting model 
+    features: list
+        List of features to be included
+    categorical_features: list
+        List of names of categorical features
+    categorical_encoding: str
+        String name of categorical encoding to use
+    calendar_anomaly: list
+        List of names of calendar features affected by an anomaly
+    detrend: bool
+        Whether or not to remove the trend from time series
+    response_scaling:
+        Whether or not to perform scaling of the reponse variable
+    lags: list
+        List of integer lag values
+    window_sizes: list
+        List of integer window sizes values
+    window_functions: list
+        List of string names of the window functions
+    """
+    def __init__(self, model_params=dict(), features=["calendar", "calendar_cyclical"], 
+                 categorical_features=list(), categorical_encoding="default", calendar_anomaly=False, 
+                 detrend=True, response_scaling=False, lags=None, window_sizes=None, window_functions=None):
+
+        if lags is not None and "lag" not in features:
+            features.append("lag")
+        if (window_sizes is not None and window_functions is not None) and "rw" not in features:
+            features.append("rw")
+
+        self.model_params = model_params
+        self.features = features
+        self._categorical_features = categorical_features
+        self.categorical_encoding = categorical_encoding
+        self.calendar_anomaly = calendar_anomaly
+        self.detrend = detrend
+        self.response_scaling = response_scaling
+        self.lags = lags
+        self.window_sizes = window_sizes
+        self.window_functions = window_functions
+        self._validate_inputs()
 
     def _validate_inputs(self):
         """
@@ -220,6 +264,36 @@ class ForecasterBase(object):
             y_hat /= self.y_std 
             
         return y_hat
+
+    def _prepare_features(self, train_data, valid_period=None):
+        """
+        Parameters
+        ----------
+        train_data : pandas.DataFrame
+            dataframe with at least columns 'ds' and 'y'
+        valid_period: pandas.DataFrame
+            dataframe (with column 'ds') indicating the validation period
+        """
+        self._validate_fit_inputs(train_data, valid_period)
+        train_features,categorical_features = self._prepare_train_features(train_data)
+
+        if valid_period is not None:
+            valid_features = self._prepare_valid_features(valid_period, train_features)
+            valid_start_time = valid_features.ds.min()
+            # removes validation period from train data
+            train_data = train_data.query("ds < @valid_start_time")
+            train_features = train_features.query("ds < @valid_start_time")
+        
+        train_features["y_hat"] = self._prepare_train_response(train_features)
+        if valid_period is not None:
+            valid_features["y_hat"] = self._prepare_valid_response(valid_features)
+        
+        self.train_data = train_data
+        self.train_features = train_features
+        self.valid_period = valid_period
+        self.valid_features = valid_features if valid_period is not None else None
+        self.categorical_features = categorical_features
+        return self.train_features,self.valid_features
 
     def evaluate(self, eval_data, metric="rmse"):
         """
