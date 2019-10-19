@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import category_encoders as ce
 from inspect import getmembers, isfunction
 
 from tsforest.features import FeaturesGenerator
@@ -95,6 +96,13 @@ class ForecasterBase(object):
             raise TypeError("'metric' should be of type str.")
         elif metric not in AVAILABLE_METRICS:
             raise ValueError(f"'metric' should be any of these: {AVAILABLE_METRICS}")
+
+    def _apply_encoding(self, train_features, categorical_features, categorical_encoding):
+        encoder_class = getattr(ce, categorical_encoding)
+        encoder = encoder_class(cols=categorical_features)
+        encoder.fit(train_features, train_features.y.values)
+        train_features_encoded = encoder.transform(train_features)
+        return train_features_encoded,encoder
       
     def _prepare_train_features(self, train_data):
         """
@@ -116,6 +124,9 @@ class ForecasterBase(object):
                 "'calendar_anomaly' column found, but no names of affected features were provided."
             idx = train_features.query("calendar_anomaly == 1").index
             train_features.loc[idx, self.calendar_anomaly] = np.nan
+        if self.categorical_encoding != "default":
+            train_features,encoder = self._apply_encoding(train_features, categorical_features, self.categorical_encoding)
+            self.encoder = encoder
 
         exclude_features = ["ds", "y", "y_hat", "month_day", "weight", 
                             "fold_column", "zero_response", "calendar_anomaly"]
@@ -134,6 +145,8 @@ class ForecasterBase(object):
         valid_features = pd.merge(valid_period, train_features, how="inner", on=["ds"])
         assert len(valid_features) > 0, \
             "None of the dates in valid_period are in train_features."
+        if self.categorical_encoding != "default":
+            valid_features = self.encoder.transform(valid_features)
         return valid_features
 
     def _prepare_predict_features(self, predict_data):
@@ -155,6 +168,8 @@ class ForecasterBase(object):
                 "'calendar_anomaly' column found, but no names of affected features were provided."
             idx = predict_features.query("calendar_anomaly == 1").index
             predict_features.loc[idx, self.calendar_anomaly] = np.nan
+        if self.categorical_encoding != "default":
+            predict_features = self.transform(predict_features)
         return predict_features
     
     def _prepare_train_response(self, train_features):

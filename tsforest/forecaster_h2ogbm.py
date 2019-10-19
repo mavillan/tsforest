@@ -35,8 +35,8 @@ class H2OGBMForecaster(ForecasterBase):
         List of string names of the window functions
     """
     def __init__(self, model_params=dict(), features=["calendar", "calendar_cylical"], 
-                 categorical_features=list(), calendar_anomaly=False, detrend=True, 
-                 response_scaling=False, lags=None, window_sizes=None, window_functions=None):
+                 categorical_features=list(), categorical_encoding="default", calendar_anomaly=False, 
+                 detrend=True, response_scaling=False, lags=None, window_sizes=None, window_functions=None):
 
         if lags is not None and "lag" not in features:
             features.append("lag")
@@ -46,6 +46,7 @@ class H2OGBMForecaster(ForecasterBase):
         self.model_params = model_params
         self.features = features
         self._categorical_features = categorical_features
+        self.categorical_encoding = categorical_encoding
         self.calendar_anomaly = calendar_anomaly
         self.detrend = detrend
         self.response_scaling = response_scaling
