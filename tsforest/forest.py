@@ -5,28 +5,13 @@ import h2o
 import lightgbm
 import catboost
 from tsforest.config import cat_parameters, lgbm_parameters, gbm_parameters
+from tsforest.forest_base import BaseRegressor
 
-class H2OGBMRegressor:
+class H2OGBMRegressor(BaseRegressor):
     def __init__(self, model_params):
         self.model_params = {**gbm_parameters, **model_params}
 
     def cast_dataframe(self, features_dataframe, input_features, target,  categorical_features):
-        """
-        Parameters
-        ----------
-        features_dataframe: pandas.DataFrame
-            Dataframe containing all the features.
-        input_features: list
-            List of column names to use as predictor features.
-        target: str
-            Name of column to use as target variable.
-        categorical_features: list
-            List of column names of categorical features.
-        Returns
-        ----------
-        features_dataframe_casted: h2o.H2OFrame
-            features dataframe casted to H2O dataframe format
-        """
         features_types = {feature:"categorical" for feature in categorical_features
                           if feature in input_features}
         features_dataframe_casted = h2o.H2OFrame(features_dataframe, 
@@ -62,27 +47,11 @@ class H2OGBMRegressor:
         return prediction
 
 
-class LightGBMRegressor:
+class LightGBMRegressor(BaseRegressor):
     def __init__(self, model_params):
         self.model_params = {**lgbm_parameters, **model_params}
 
     def cast_dataframe(self, features_dataframe, input_features, target, categorical_features):
-        """
-        Parameters
-        ----------
-        features_dataframe: pandas.DataFrame
-            Dataframe containing all the features.
-        input_features: list
-            List of column names to use as predictor features.
-        target: str
-            Name of column to use as target variable.
-        categorical_features: list
-            List of column names of categorical features.
-        Returns
-        ----------
-        features_dataframe_casted: catboost.Pool
-            features dataframe casted to CatBoost dataframe format
-        """
         dataset_params = {"data":features_dataframe.loc[:, input_features],
                           "categorical_feature":categorical_features,
                           "free_raw_data":False}
@@ -116,27 +85,12 @@ class LightGBMRegressor:
         prediction = self.model.predict(predict_features.loc[:, self.input_features])
         return prediction
 
-class CatBoostRegressor:
+
+class CatBoostRegressor(BaseRegressor):
     def __init__(self, model_params):
         self.model_params = {**cat_parameters, **model_params}
 
     def cast_dataframe(self, features_dataframe, input_features, target,  categorical_features):
-        """
-        Parameters
-        ----------
-        features_dataframe: pandas.DataFrame
-            Dataframe containing all the features.
-        input_features: list
-            List of column names to use as predictor features.
-        target: str
-            Name of column to use as target variable.
-        categorical_features: list
-            List of column names of categorical features.
-        Returns
-        ----------
-        features_dataframe_casted: catboost.Pool
-            features dataframe casted to CatBoost dataframe format
-        """
         dataset_params = {"data":features_dataframe.loc[:, input_features],
                           "cat_features":categorical_features}
         if "weight" in features_dataframe.columns:

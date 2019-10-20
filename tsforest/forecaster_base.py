@@ -271,9 +271,9 @@ class ForecasterBase(object):
         Parameters
         ----------
         train_data : pandas.DataFrame
-            dataframe with at least columns 'ds' and 'y'
+            Dataframe with at least columns 'ds' and 'y'.
         valid_period: pandas.DataFrame
-            dataframe (with column 'ds') indicating the validation period
+            Dataframe (with column 'ds') indicating the validation period.
         """
         train_features,categorical_features = self._prepare_train_features(train_data)
 
@@ -296,6 +296,14 @@ class ForecasterBase(object):
         return self.train_features,self.valid_features
 
     def fit(self, train_data, valid_period=None):
+        """
+        Parameters
+        ----------
+        train_data: pandas.DataFrame
+            Dataframe with at least columns 'ds' and 'y'.
+        valid_period: pandas.DataFrame
+            Dataframe (with column 'ds') indicating the validation period.
+        """
         self._validate_fit_inputs(train_data, valid_period)
         train_features,valid_features = self._prepare_features(train_data, valid_period)
         self.model.fit(train_features, valid_features, self.input_features, self.target, self.categorical_features)
