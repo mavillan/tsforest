@@ -3,7 +3,7 @@ import pandas as pd
 
 import unittest
 
-from tsforest.forecaster_catboost import CatBoostForecaster
+from tsforest.forecaster import CatBoostForecaster
 from tsforest.utils import make_time_range
 
 DATA_PATH = './tests/tests_data/data.csv'

@@ -2,9 +2,9 @@ import numpy as np
 import pandas as pd
 import unittest
 
-from tsforest.forecaster_lightgbm import LightGBMForecaster
-from tsforest.forecaster_h2ogbm import H2OGBMForecaster
-from tsforest.forecaster_catboost import CatBoostForecaster
+from tsforest.forecaster import LightGBMForecaster
+from tsforest.forecaster import H2OGBMForecaster
+from tsforest.forecaster import CatBoostForecaster
 from tsforest.grid_search import GridSearch
 from tsforest.utils import make_time_range
 

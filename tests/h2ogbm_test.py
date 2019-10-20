@@ -3,7 +3,7 @@ import pandas as pd
 
 import unittest
 
-from tsforest.forecaster_h2ogbm import H2OGBMForecaster
+from tsforest.forecaster import H2OGBMForecaster
 from tsforest.utils import make_time_range
 
 DATA_PATH = './tests/tests_data/data.csv'
