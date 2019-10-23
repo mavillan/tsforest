@@ -9,3 +9,4 @@ fbprophet>=0.5
 tqdm>=4.30.0
 catboost>=0.17.0
 category_encoders>=2.1.0
+xgboost>=0.90.0

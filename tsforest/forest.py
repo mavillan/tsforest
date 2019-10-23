@@ -4,7 +4,8 @@ warnings.simplefilter(action="ignore", category=UserWarning)
 import h2o
 import lightgbm
 import catboost
-from tsforest.config import cat_parameters, lgbm_parameters, gbm_parameters
+import xgboost
+from tsforest.config import cat_parameters, lgbm_parameters, gbm_parameters, xgb_parameters
 from tsforest.forest_base import BaseRegressor
 
 class H2OGBMRegressor(BaseRegressor):
@@ -56,7 +57,7 @@ class LightGBMRegressor(BaseRegressor):
                           "categorical_feature":categorical_features,
                           "free_raw_data":False}
         if "weight" in features_dataframe.columns:
-            dataset_params["weight"] = features_dataframe.weight.values
+            dataset_params["weight"] = features_dataframe.loc[:, weight].values
         if target in features_dataframe.columns:
             dataset_params["label"] = features_dataframe.loc[:, target].values
         features_dataframe_casted = lightgbm.Dataset(**dataset_params)
@@ -94,7 +95,7 @@ class CatBoostRegressor(BaseRegressor):
         dataset_params = {"data":features_dataframe.loc[:, input_features],
                           "cat_features":categorical_features}
         if "weight" in features_dataframe.columns:
-            dataset_params["weight"] = features_dataframe.weight.values
+            dataset_params["weight"] = features_dataframe.loc[:, weight].values
         if target in features_dataframe.columns:
             dataset_params["label"] = features_dataframe.loc[:, target].values
         features_dataframe_casted = catboost.Pool(**dataset_params)
@@ -122,4 +123,44 @@ class CatBoostRegressor(BaseRegressor):
     def predict(self, predict_features):
         predict_features_casted = self.cast_dataframe(predict_features, self.input_features, self.target, self.categorical_features)
         prediction = self.model.predict(predict_features_casted)
+        return prediction
+
+
+class XGBoostRegressor(BaseRegressor):
+    def __init__(self, model_params):
+        self.model_params = {**xgb_parameters, **model_params}
+
+    def cast_dataframe(self, features_dataframe, input_features, target,  categorical_features):
+        dataset_params = {"data":features_dataframe.loc[:, input_features]}
+        if "weight" in features_dataframe.columns:
+            dataset_params["weight"] = features_dataframe.loc[:, weight].values
+        if target in features_dataframe.columns:
+            dataset_params["label"] = features_dataframe.loc[:, target].values
+        features_dataframe_casted = xgboost.DMatrix(**dataset_params)
+        return features_dataframe_casted
+    
+    def fit(self, train_features, valid_features, input_features, target, categorical_features):
+        train_features_casted = self.cast_dataframe(train_features, input_features, target, categorical_features)
+        valid_features_casted = self.cast_dataframe(valid_features, input_features, target, categorical_features) \
+                                if valid_features is not None else None
+        model_params = dict(self.model_params)
+        training_params = {"dtrain":train_features_casted,
+                           "num_boost_round":model_params.pop("num_boost_round"),
+                           "early_stopping_rounds":model_params.pop("early_stopping_rounds")}
+        if valid_features is not None:
+            training_params["evals"] = [(valid_features_casted,"eval"),]
+            training_params["verbose_eval"] = False
+        elif "early_stopping_rounds" in training_params:
+            del training_params["early_stopping_rounds"]
+        training_params["params"] = model_params
+        # model training
+        self.model = xgboost.train(**training_params)
+        self.best_iteration = self.model.best_ntree_limit
+        self.input_features = input_features
+        self.target = target
+        self.categorical_features = categorical_features
+    
+    def predict(self, predict_features):
+        predict_features_casted = self.cast_dataframe(predict_features, self.input_features, self.target, self.categorical_features)
+        prediction = self.model.predict(predict_features_casted, ntree_limit=self.best_iteration)
         return prediction

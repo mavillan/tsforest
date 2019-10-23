@@ -37,6 +37,16 @@ cat_parameters = {
     "early_stopping_rounds":30
 }
 
+# xgboost default parameters
+xgb_parameters = {
+    "objective":"reg:squarederror",
+    "learning_rate":0.25,
+    "max_depth":6,
+    "lambda":1,
+    "num_boost_round":300,
+    "early_stopping_rounds":30
+}
+
 # fbprophet default parameters 
 prophet_kwargs = {
     "n_changepoints":120,

@@ -142,12 +142,13 @@ class ForecasterBase(object):
         elif metric not in AVAILABLE_METRICS:
             raise ValueError(f"'metric' should be any of these: {AVAILABLE_METRICS}")
 
-    def _apply_encoding(self, train_features, categorical_features, categorical_encoding):
+    def _apply_encoding(self, train_features, input_features, categorical_features, categorical_encoding):
+        train_features = train_features.copy()
         encoder_class = getattr(ce, categorical_encoding)
         encoder = encoder_class(cols=categorical_features)
-        encoder.fit(train_features, train_features.y.values)
-        train_features_encoded = encoder.transform(train_features)
-        return train_features_encoded,encoder
+        encoder.fit(train_features.loc[:, input_features], train_features.loc[:, 'y'].values)
+        train_features.loc[:, input_features] = encoder.transform(train_features.loc[:, input_features])
+        return train_features,encoder
       
     def _prepare_train_features(self, train_data):
         """
@@ -161,7 +162,14 @@ class ForecasterBase(object):
                                                window_sizes=self.window_sizes,
                                                window_functions=self.window_functions)
         train_features,categorical_features = features_generator.compute_train_features(train_data)
+        self.features_generator = features_generator
+
         categorical_features = categorical_features + self._categorical_features
+        exclude_features = ["ds", "y", "y_hat", "month_day", "weight", 
+                            "fold_column", "zero_response", "calendar_anomaly"]
+        self.input_features = [feature for feature in train_features.columns
+                               if feature not in exclude_features]
+
         if "zero_response" in train_features.columns:
             train_features = train_features.query("zero_response != 1")
         if "calendar_anomaly" in train_features.columns:
@@ -170,14 +178,9 @@ class ForecasterBase(object):
             idx = train_features.query("calendar_anomaly == 1").index
             train_features.loc[idx, self.calendar_anomaly] = np.nan
         if self.categorical_encoding != "default":
-            train_features,encoder = self._apply_encoding(train_features, categorical_features, self.categorical_encoding)
+            train_features,encoder = self._apply_encoding(train_features, self.input_features, categorical_features, self.categorical_encoding)
             self.encoder = encoder
 
-        exclude_features = ["ds", "y", "y_hat", "month_day", "weight", 
-                            "fold_column", "zero_response", "calendar_anomaly"]
-        self.input_features = [feature for feature in train_features.columns
-                               if feature not in exclude_features]
-        self.features_generator = features_generator
         return train_features,categorical_features
     
     def _prepare_valid_features(self, valid_period, train_features):
@@ -191,7 +194,7 @@ class ForecasterBase(object):
         assert len(valid_features) > 0, \
             "None of the dates in valid_period are in train_features."
         if self.categorical_encoding != "default":
-            valid_features = self.encoder.transform(valid_features)
+            valid_features.loc[:, self.input_features] = self.encoder.transform(valid_features.loc[:, self.input_features])
         return valid_features
 
     def _prepare_predict_features(self, predict_data):
@@ -214,7 +217,7 @@ class ForecasterBase(object):
             idx = predict_features.query("calendar_anomaly == 1").index
             predict_features.loc[idx, self.calendar_anomaly] = np.nan
         if self.categorical_encoding != "default":
-            predict_features = self.transform(predict_features)
+            predict_features.loc[:, self.input_features] = self.encoder.transform(predict_features.loc[:, self.input_features])
         return predict_features
     
     def _prepare_train_response(self, train_features):
@@ -292,7 +295,7 @@ class ForecasterBase(object):
         self.train_features = train_features
         self.valid_period = valid_period
         self.valid_features = valid_features if valid_period is not None else None
-        self.categorical_features = categorical_features
+        self.categorical_features = categorical_features if self.categorical_encoding=="default" else list()
         return self.train_features,self.valid_features
 
     def fit(self, train_data, valid_period=None):
