@@ -11,7 +11,6 @@ DATA_PATH = './tests/tests_data/data.csv'
 class TestLightGMB(unittest.TestCase):
 
     def test_it_fit(self):
-        print("##################"*12)
         data = pd.read_csv(DATA_PATH, parse_dates=['ds'])
 
         fcaster = LightGBMForecaster(model_params={'num_iterations':30,
