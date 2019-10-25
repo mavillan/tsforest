@@ -21,40 +21,43 @@ def fit_evaluate(model_class, model_config, model_params, train_data, valid_peri
 class GridSearch(object):
     """
     model_class: Class
-        class of the model to be instantiated
+        Class of the model to be instantiated.
     features: list
-        list of features to be included
+        List of features to be included.
     categorical_features: list
-        list of names of categorical features
+        List of names of categorical features.
+    categorical_encoding: str
+        String name of categorical encoding to use.
     calendar_anomaly: list
-        List of names of calendar features affected by an anomaly
+        List of names of calendar features affected by an anomaly.
     detrend: bool
-        whether or not to remove the trend from time serie
+        Whether or not to remove the trend from time serie.
     response_scaling:
-        Whether or not to perform scaling of the reponse variable
+        Whether or not to perform scaling of the reponse variable.
     lags: list
-        List of integer lag values
+        List of integer lag values.
     window_sizes: list
-        List of integer window sizes values
+        List of integer window sizes values.
     window_functions: list
-        List of string names of the window functions
+        List of string names of the window functions.
     hyperparams: dict
-        dictionary of hyperparameters in the form: 'parameter_name':[param_value,].
+        Dictionary of hyperparameters in the form: 'parameter_name':[param_value,].
     hyperparams_fixed: dict
-        dictionary of fixed hyperparameters in the form: {'param_name':'param_value',}.
+        Dictionary of fixed hyperparameters in the form: {'param_name':'param_value',}.
     n_jobs: int
-        number of parallel jobs to run on grid search
+        Number of parallel jobs to run on grid search.
     """
 
-    def __init__(self, model_class, features=["calendar_mixed", "events"], 
-                 categorical_features=list(), calendar_anomaly=False, 
-                 detrend=True, response_scaling=True, 
+    def __init__(self, model_class, features=["calendar", "calendar_cyclical"], 
+                 categorical_features=list(), categorical_encoding="default", 
+                 calendar_anomaly=False, detrend=True, response_scaling=False, 
                  lags=None, window_sizes=None, window_functions=None, 
                  hyperparams=dict(), hyperparams_fixed=dict(), 
                  n_jobs=-1):
         self.model_class = model_class
         self.features = features
         self.categorical_features = categorical_features
+        self.categorical_encoding = categorical_encoding
         self.calendar_anomaly = calendar_anomaly
         self.detrend = detrend
         self.response_scaling = response_scaling
@@ -96,6 +99,7 @@ class GridSearch(object):
         # parallel fit & evaluation of model on hyperparams
         model_config = {"features":self.features,
                         "categorical_features":self.categorical_features,
+                        "categorical_encoding":self.categorical_encoding,
                         "calendar_anomaly":self.calendar_anomaly,
                         "detrend":self.detrend,
                         "response_scaling":self.response_scaling,
