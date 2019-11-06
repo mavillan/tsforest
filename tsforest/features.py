@@ -8,7 +8,7 @@ from tsforest.config import (calendar_sequential_features_types,
                              calendar_cyclical_features_types,
                              all_features_types)
 
-def fill_time_gaps(data):
+def fill_time_gaps(data, freq="D"):
     """
     Parameters
     ----------
@@ -17,50 +17,70 @@ def fill_time_gaps(data):
     """
     assert set(["ds","y"]) <= set(data.columns), "Data must contain the column 'ds'."
     filled_data = (data
-                   .resample("D", on="ds").y.mean()
+                   .resample(freq, on="ds").y.mean()
                    .interpolate("linear")
                    .reset_index())
     filled_data = pd.merge(filled_data, data.drop("y", axis=1), on=["ds"], how="left")
     return filled_data
 
-def compute_calendar_features(start_time, end_time, freq="D"):
+def compute_calendar_features(date_range, ignore_const_cols=True):
     """
     Parameters
     ----------
-    start_time: str
-        start time for time range
-    end_time: str
-        end time for time range
-    freq: str
-        frequency string of pandas.date_range function
-    """
-    date_range = pd.date_range(start=start_time, end=end_time, freq=freq)
-    
+    date_range: pandas.DatetimeIndex or pandas.TimedeltaIndex
+        Ranges of date times.
+    ignore_const_cols: bool
+        Specify whether to ignore constant columns.
+    """  
     calendar_data = pd.DataFrame()
     calendar_data["ds"] = date_range
-    calendar_data["week_day"] = date_range.dayofweek
-    calendar_data["month_day"] = date_range.day
-    calendar_data["year_day"] = date_range.dayofyear
-    calendar_data["year_week"] = date_range.weekofyear
-    calendar_data["month"] = date_range.month
-    calendar_data["year"] = date_range.year
-    days_of_month = calendar_data.apply(lambda x: calendar.monthrange(x.year,x.month)[1], axis=1)
-    calendar_data["month_progress"] = calendar_data.month_day/days_of_month
+    calendar_features = ["year", "quarter", "month", "days_in_month", 
+                         "weekofyear", "dayofyear", "day", "dayofweek", 
+                         "hour", "minute", "second", "microsecond", 
+                         "nanosecond"]
+    calendar_features_map = {"weekofyear":"year_week",
+                             "dayofyear":"year_day",
+                             "day":"month_day",
+                             "dayofweek":"week_day"}
 
-    # cyclical encodings: day of week
-    calendar_data["week_day_cos"] = np.cos(calendar_data.week_day*(2.*np.pi/7))
-    calendar_data["week_day_sin"] = np.sin(calendar_data.week_day*(2.*np.pi/7))
-    # cyclical encodings: day of year
-    calendar_data["year_day_cos"] = np.cos((calendar_data.year_day-1)*(2.*np.pi/366))
-    calendar_data["year_day_sin"] = np.sin((calendar_data.year_day-1)*(2.*np.pi/366))
-    # cyclical encodings: week of year
-    calendar_data["year_week_cos"] = np.cos((calendar_data.year_week-1)*(2.*np.pi/52))
-    calendar_data["year_week_sin"] = np.sin((calendar_data.year_week-1)*(2.*np.pi/52))
-    # cyclical encodings: month of year
-    calendar_data["month_cos"] = np.cos((calendar_data.month-1)*(2.*np.pi/12))
-    calendar_data["month_sin"] = np.sin((calendar_data.month-1)*(2.*np.pi/12))
+    for feature in calendar_features:
+        feature_series =  getattr(date_range, feature)
+        if feature_series.nunique() == 1 and ignore_const_cols: 
+            continue
+        feature = calendar_features_map[feature] if feature in calendar_features_map else feature
+        calendar_data[feature] = feature_series
+    
+    # adds missing features
+    if (pd.infer_freq(date_range) in ["L", "ms", "U", "us", "N"] 
+        and "microsecond" in calendar_data.columns):
+        calendar_data['millisecond'] = calendar_data.microsecond//1000
+    if {"month_day", "days_in_month"} < set(calendar_data.columns):
+        calendar_data["month_progress"] = calendar_data.month_day/calendar_data.days_in_month 
+    # adds cyclical encodings
+    if "second" in calendar_data.columns:
+        calendar_data["second_cos"] = np.cos(calendar_data.second*(2.*np.pi/60))
+        calendar_data["second_sin"] = np.sin(calendar_data.second*(2.*np.pi/60))
+    if "minute" in calendar_data.columns:
+        calendar_data["minute_cos"] = np.cos(calendar_data.minute*(2.*np.pi/60))
+        calendar_data["minute_sin"] = np.sin(calendar_data.minute*(2.*np.pi/60))
+    if "hour" in calendar_data.columns:
+        calendar_data["hour_cos"] = np.cos(calendar_data.hour*(2.*np.pi/24))
+        calendar_data["hour_sin"] = np.sin(calendar_data.hour*(2.*np.pi/24))
+    if "week_day" in calendar_data.columns:
+        calendar_data["week_day_cos"] = np.cos(calendar_data.week_day*(2.*np.pi/7))
+        calendar_data["week_day_sin"] = np.sin(calendar_data.week_day*(2.*np.pi/7))
+    if "year_day" in calendar_data.columns:
+        calendar_data["year_day_cos"] = np.cos((calendar_data.year_day-1)*(2.*np.pi/366))
+        calendar_data["year_day_sin"] = np.sin((calendar_data.year_day-1)*(2.*np.pi/366))
+    if "year_week" in calendar_data.columns:
+        calendar_data["year_week_cos"] = np.cos((calendar_data.year_week-1)*(2.*np.pi/52))
+        calendar_data["year_week_sin"] = np.sin((calendar_data.year_week-1)*(2.*np.pi/52))
+    if "month" in calendar_data.columns:
+        calendar_data["month_cos"] = np.cos((calendar_data.month-1)*(2.*np.pi/12))
+        calendar_data["month_sin"] = np.sin((calendar_data.month-1)*(2.*np.pi/12))
     # week_day shifted to 1-7
-    calendar_data["week_day"] += 1
+    if "week_day" in calendar_data.columns:
+        calendar_data["week_day"] += 1
     return calendar_data
 
 def compute_lag_features(data, lags):
@@ -120,12 +140,14 @@ class FeaturesGenerator():
         self.window_sizes = window_sizes
         self.window_functions = window_functions
 
-    def compute_train_features(self, data):
+    def compute_train_features(self, data, ignore_const_cols=True):
         """
         Parameters
         ----------
         data : pd.DataFrame
             Dataframe with (at least) columns: 'ds' and 'y'
+        ignore_const_cols: bool
+            Specify whether to ignore constant columns.
         Returns
         ----------
         all_features: pd.Dataframe
@@ -140,8 +162,9 @@ class FeaturesGenerator():
 
         # generating the calendar features
         if {"calendar","calendar_cyclical"} & set(self.include_features):
-            calendar_features = (compute_calendar_features(data.ds.min(), data.ds.max())
-                                 .merge(data.loc[:, ["ds"]], how="inner", on=["ds"]))
+            input_params = {"date_range":pd.DatetimeIndex(data.ds),
+                            "ignore_const_cols":ignore_const_cols}
+            calendar_features = compute_calendar_features(**input_params)
         if "calendar" not in self.include_features:
             columns_to_drop = list(calendar_sequential_features_types.keys())
             calendar_features.drop(columns=columns_to_drop, inplace=True)
@@ -172,12 +195,14 @@ class FeaturesGenerator():
                                 if feature in all_features.columns and dtype=="categorical"]
         return all_features,categorical_features
         
-    def compute_predict_features(self, data):
+    def compute_predict_features(self, data, ignore_const_cols=True):
         """
         Parameters
         ----------
         data: pandas.DataFrame
             Dataframe with (at least) column: 'ds'
+        ignore_const_cols: bool
+            Specify whether to ignore constant columns.
         """
         self.predict_data = data
 
@@ -186,8 +211,9 @@ class FeaturesGenerator():
 
         # generating the calendar features
         if np.any(["calendar" in feat for feat in self.include_features]):
-            calendar_features = (compute_calendar_features(data.ds.min(), data.ds.max())
-                                 .merge(data.loc[:, ["ds"]], how="inner", on=["ds"]))
+            input_params = {"date_range":pd.DatetimeIndex(data.ds),
+                            "ignore_const_cols":ignore_const_cols}
+            calendar_features = compute_calendar_features(**input_params)
         if "calendar" not in self.include_features:
             columns_to_drop = list(calendar_sequential_features_types.keys())
             calendar_features.drop(columns=columns_to_drop, inplace=True)

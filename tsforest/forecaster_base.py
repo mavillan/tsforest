@@ -167,6 +167,7 @@ class ForecasterBase(object):
         categorical_features = categorical_features + self._categorical_features
         exclude_features = ["ds", "y", "y_hat", "month_day", "weight", 
                             "fold_column", "zero_response", "calendar_anomaly"]
+        self.raw_features = train_features.columns
         self.input_features = [feature for feature in train_features.columns
                                if feature not in exclude_features]
 
@@ -210,7 +211,8 @@ class ForecasterBase(object):
             Dataframe containing all the features for making predictions with 
             the trained model.
         """
-        predict_features,_ = self.features_generator.compute_predict_features(predict_data)
+        features_generator = self.features_generator
+        predict_features,_ = features_generator.compute_predict_features(predict_data, ignore_const_cols=False)
         if "calendar_anomaly" in predict_features.columns:
             assert self.calendar_anomaly is not None, \
                 "'calendar_anomaly' column found, but no names of affected features were provided."
@@ -218,7 +220,8 @@ class ForecasterBase(object):
             predict_features.loc[idx, self.calendar_anomaly] = np.nan
         if self.categorical_encoding != "default":
             predict_features.loc[:, self.input_features] = self.encoder.transform(predict_features.loc[:, self.input_features])
-        return predict_features
+        features_to_keep = [feature for feature in predict_features.columns if feature in self.raw_features]
+        return predict_features.loc[:, features_to_keep]
     
     def _prepare_train_response(self, train_features):
         """

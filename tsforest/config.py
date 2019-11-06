@@ -62,17 +62,31 @@ prophet_kwargs_extra = {
 
 # datatype of sequential calendar features
 calendar_sequential_features_types = {
-    "week_day":"numeric",
-    "month_day":"numeric",
-    "year_day":"numeric",
-    "year_week":"numeric",
-    "month":"categorical",
     "year":"numeric",
+    "quarter":"numeric",
+    "month":"categorical",
+    "days_in_month":"numeric",
+    "year_week":"numeric",
+    "year_day":"numeric",
+    "month_day":"numeric",
+    "week_day":"numeric",
+    "hour":"numeric",
+    "minute":"numeric",
+    "second":"numeric",
+    "millisecond":"numeric",
+    "microsecond":"numeric",
+    "nanosecond":"numeric",
     "month_progress":"numeric"
 }
 
 # datatype of cyclical calendar features
 calendar_cyclical_features_types = {
+    "second_cos":"numeric",
+    "second_sin":"numeric",
+    "minute_cos":"numeric",
+    "minute_sin":"numeric",
+    "hour_cos":"numeric",
+    "hour_sin":"numeric",
     "week_day_cos":"numeric",
     "week_day_sin":"numeric",
     "year_day_cos":"numeric",
