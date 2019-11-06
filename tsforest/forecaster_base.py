@@ -181,7 +181,6 @@ class ForecasterBase(object):
         if self.categorical_encoding != "default":
             train_features,encoder = self._apply_encoding(train_features, self.input_features, categorical_features, self.categorical_encoding)
             self.encoder = encoder
-
         return train_features,categorical_features
     
     def _prepare_valid_features(self, valid_period, train_features):
@@ -194,8 +193,6 @@ class ForecasterBase(object):
         valid_features = pd.merge(valid_period, train_features, how="inner", on=["ds"])
         assert len(valid_features) > 0, \
             "None of the dates in valid_period are in train_features."
-        if self.categorical_encoding != "default":
-            valid_features.loc[:, self.input_features] = self.encoder.transform(valid_features.loc[:, self.input_features])
         return valid_features
 
     def _prepare_predict_features(self, predict_data):
