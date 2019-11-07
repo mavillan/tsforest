@@ -50,7 +50,7 @@ class GridSearch(object):
 
     def __init__(self, model_class, features=["calendar", "calendar_cyclical"], 
                  categorical_features=list(), categorical_encoding="default", 
-                 calendar_anomaly=False, detrend=True, response_scaling=False, 
+                 calendar_anomaly=list(), detrend=True, response_scaling=False, 
                  lags=None, window_sizes=None, window_functions=None, 
                  hyperparams=dict(), hyperparams_fixed=dict(), 
                  n_jobs=-1):

@@ -42,7 +42,7 @@ class ForecasterBase(object):
         List of string names of the window functions.
     """
     def __init__(self, model_params=dict(), features=["calendar", "calendar_cyclical"], exclude_features=list(),
-                 categorical_features=list(), categorical_encoding="default", calendar_anomaly=False, 
+                 categorical_features=list(), categorical_encoding="default", calendar_anomaly=list(), 
                  detrend=True, response_scaling=False, lags=None, window_sizes=None, window_functions=None):
 
         if lags is not None and "lag" not in features:
@@ -53,8 +53,8 @@ class ForecasterBase(object):
         self.model = None
         self.model_params = model_params
         self.features = features
-        self.exclude_features = exclude_features + ["ds", "y", "y_hat", "weight", "fold_column",
-                                                    "zero_response", "calendar_anomaly"]
+        self.exclude_features = ["ds", "y", "y_hat", "weight", "fold_column",
+                                 "zero_response", "calendar_anomaly"] + exclude_features
         self._categorical_features = categorical_features
         self.categorical_encoding = categorical_encoding
         self.calendar_anomaly = calendar_anomaly
@@ -81,8 +81,8 @@ class ForecasterBase(object):
         if not isinstance(self._categorical_features, list):
             raise TypeError("Parameter 'categorical_features' should be of type 'list'.")
 
-        if not isinstance(self.calendar_anomaly, bool):
-            raise TypeError("Parameter 'calendar_anomaly' should be of type 'bool'.")
+        if not isinstance(self.calendar_anomaly, list):
+            raise TypeError("Parameter 'calendar_anomaly' should be of type 'list'.")
 
         if not isinstance(self.detrend, bool):
             raise TypeError("Parameter 'detrend' should be of type 'bool'.")
@@ -176,8 +176,10 @@ class ForecasterBase(object):
         if "zero_response" in train_features.columns:
             train_features = train_features.query("zero_response != 1")
         if "calendar_anomaly" in train_features.columns:
-            assert self.calendar_anomaly is not None, \
-                "'calendar_anomaly' column found, but no names of affected features were provided."
+            assert len(self.calendar_anomaly) != 0, \
+                "'calendar_anomaly' column found, but names of affected features were not provided."
+            assert set(self.calendar_anomaly) <= set(train_features.columns), \
+                f"Calendar anomaly affected columns: {set(self.calendar_anomaly)-set(train_features.columns)} are not present in 'train_features'."
             idx = train_features.query("calendar_anomaly == 1").index
             train_features.loc[idx, self.calendar_anomaly] = np.nan
         if self.categorical_encoding != "default":
@@ -213,8 +215,10 @@ class ForecasterBase(object):
         features_generator = self.features_generator
         predict_features,_ = features_generator.compute_predict_features(predict_data, ignore_const_cols=False)
         if "calendar_anomaly" in predict_features.columns:
-            assert self.calendar_anomaly is not None, \
+            assert len(self.calendar_anomaly) != 0, \
                 "'calendar_anomaly' column found, but no names of affected features were provided."
+            assert set(self.calendar_anomaly) <= set(train_features.columns), \
+                f"Calendar anomaly affected columns: {set(self.calendar_anomaly)-set(train_features.columns)} are not present in 'train_features'."
             idx = predict_features.query("calendar_anomaly == 1").index
             predict_features.loc[idx, self.calendar_anomaly] = np.nan
         if self.categorical_encoding != "default":
