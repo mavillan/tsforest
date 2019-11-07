@@ -22,6 +22,8 @@ class ForecasterBase(object):
         Dictionary containing the parameters of the specific boosting model.
     features: list
         List of features to be included.
+    exclude_features: list
+        List of features to be excluded from training dataframe.
     categorical_features: list
         List of names of categorical features.
     categorical_encoding: str
@@ -39,7 +41,7 @@ class ForecasterBase(object):
     window_functions: list
         List of string names of the window functions.
     """
-    def __init__(self, model_params=dict(), features=["calendar", "calendar_cyclical"], 
+    def __init__(self, model_params=dict(), features=["calendar", "calendar_cyclical"], exclude_features=list(),
                  categorical_features=list(), categorical_encoding="default", calendar_anomaly=False, 
                  detrend=True, response_scaling=False, lags=None, window_sizes=None, window_functions=None):
 
@@ -51,6 +53,8 @@ class ForecasterBase(object):
         self.model = None
         self.model_params = model_params
         self.features = features
+        self.exclude_features = exclude_features + ["ds", "y", "y_hat", "weight", "fold_column",
+                                                    "zero_response", "calendar_anomaly"]
         self._categorical_features = categorical_features
         self.categorical_encoding = categorical_encoding
         self.calendar_anomaly = calendar_anomaly
@@ -165,11 +169,9 @@ class ForecasterBase(object):
         self.features_generator = features_generator
 
         categorical_features = categorical_features + self._categorical_features
-        exclude_features = ["ds", "y", "y_hat", "month_day", "weight", 
-                            "fold_column", "zero_response", "calendar_anomaly"]
         self.raw_features = train_features.columns
         self.input_features = [feature for feature in train_features.columns
-                               if feature not in exclude_features]
+                               if feature not in self.exclude_features]
 
         if "zero_response" in train_features.columns:
             train_features = train_features.query("zero_response != 1")
