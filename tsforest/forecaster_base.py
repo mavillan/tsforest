@@ -6,6 +6,8 @@ from inspect import getmembers, isfunction
 from tsforest.features import FeaturesGenerator
 from tsforest.trend import TrendEstimator
 from tsforest import metrics
+from tsforest.config import (calendar_features_names,
+                             calendar_cyclical_features_names)
 
 # available methods in pandas.core.window.Rolling as of pandas 0.25.1 
 AVAILABLE_RW_FUNCTIONS = ["count", "sum", "mean", "median", "var", "std", "min", 
@@ -25,11 +27,13 @@ class ForecasterBase(object):
     exclude_features: list
         List of features to be excluded from training dataframe.
     categorical_features: list
-        List of names of categorical features.
+        List of names of features to be treated as categorical.
     categorical_encoding: str
         String name of categorical encoding to use.
     calendar_anomaly: list
         List of names of calendar features affected by an anomaly.
+    ts_uid_columns: list
+        List of columns names that are unique identifiers for time series.
     detrend: bool
         Whether or not to remove the trend from time series.
     response_scaling:
@@ -41,9 +45,10 @@ class ForecasterBase(object):
     window_functions: list
         List of string names of the window functions.
     """
-    def __init__(self, model_params=dict(), features=["calendar", "calendar_cyclical"], exclude_features=list(),
-                 categorical_features=list(), categorical_encoding="default", calendar_anomaly=list(), 
-                 detrend=True, response_scaling=False, lags=None, window_sizes=None, window_functions=None):
+    def __init__(self, model_params=dict(), features=["calendar", "calendar_cyclical"], 
+                 exclude_features=list(), categorical_features=list(), categorical_encoding="default", 
+                 calendar_anomaly=list(), ts_uid_columns=list(), detrend=True, response_scaling=False, 
+                 lags=None, window_sizes=None, window_functions=None):
 
         if lags is not None and "lag" not in features:
             features.append("lag")
@@ -55,16 +60,17 @@ class ForecasterBase(object):
         self.features = features
         self.exclude_features = ["ds", "y", "y_hat", "weight", "fold_column",
                                  "zero_response", "calendar_anomaly"] + exclude_features
-        self._categorical_features = categorical_features
+        self.categorical_features = categorical_features
         self.categorical_encoding = categorical_encoding
         self.calendar_anomaly = calendar_anomaly
+        self.ts_uid_columns = ts_uid_columns
         self.detrend = detrend
         self.response_scaling = response_scaling
         self.lags = lags
         self.window_sizes = window_sizes
         self.window_functions = window_functions
         self._validate_inputs()
-
+    
     def _validate_inputs(self):
         """
         Validates the inputs
@@ -78,11 +84,14 @@ class ForecasterBase(object):
             if any([x not in ["calendar", "calendar_cyclical", "lag", "rw"] for x in self.features]):
                 raise ValueError("Values in 'features' should be any of: ['calendar', 'calendar_cyclical', 'lag', 'rw'].")
         
-        if not isinstance(self._categorical_features, list):
+        if not isinstance(self.categorical_features, list):
             raise TypeError("Parameter 'categorical_features' should be of type 'list'.")
 
         if not isinstance(self.calendar_anomaly, list):
             raise TypeError("Parameter 'calendar_anomaly' should be of type 'list'.")
+        
+        if not isinstance(self.ts_uid_columns, list):
+            raise TypeError("Parameter 'ts_uid_columns' should be of type 'list'.")
 
         if not isinstance(self.detrend, bool):
             raise TypeError("Parameter 'detrend' should be of type 'bool'.")
@@ -165,10 +174,8 @@ class ForecasterBase(object):
                                                lags=self.lags,
                                                window_sizes=self.window_sizes,
                                                window_functions=self.window_functions)
-        train_features,categorical_features = features_generator.compute_train_features(train_data)
+        train_features = features_generator.compute_train_features(train_data)
         self.features_generator = features_generator
-
-        categorical_features = categorical_features + self._categorical_features
         self.raw_features = train_features.columns
         self.input_features = [feature for feature in train_features.columns
                                if feature not in self.exclude_features]
@@ -183,9 +190,9 @@ class ForecasterBase(object):
             idx = train_features.query("calendar_anomaly == 1").index
             train_features.loc[idx, self.calendar_anomaly] = np.nan
         if self.categorical_encoding != "default":
-            train_features,encoder = self._apply_encoding(train_features, self.input_features, categorical_features, self.categorical_encoding)
+            train_features,encoder = self._apply_encoding(train_features, self.input_features, self.categorical_features, self.categorical_encoding)
             self.encoder = encoder
-        return train_features,categorical_features
+        return train_features
     
     def _prepare_valid_features(self, valid_period, train_features):
         """
@@ -213,7 +220,7 @@ class ForecasterBase(object):
             the trained model.
         """
         features_generator = self.features_generator
-        predict_features,_ = features_generator.compute_predict_features(predict_data, ignore_const_cols=False)
+        predict_features = features_generator.compute_predict_features(predict_data, ignore_const_cols=False)
         if "calendar_anomaly" in predict_features.columns:
             assert len(self.calendar_anomaly) != 0, \
                 "'calendar_anomaly' column found, but no names of affected features were provided."
@@ -236,7 +243,6 @@ class ForecasterBase(object):
             Dataframe containing the columns 'ds' and 'y'.
         """
         y_hat = train_features.y.copy()
-
         if self.detrend:
             trend_estimator = TrendEstimator()
             trend_estimator.fit(data=train_features.loc[:, ["ds", "y"]])
@@ -248,7 +254,6 @@ class ForecasterBase(object):
             y_std = y_hat.std()
             y_hat -= y_mean
             y_hat /= y_std 
-
         self.y_mean = y_mean if "y_mean" in locals() else None
         self.y_std  = y_std if "y_std" in locals() else None
         self.target = "y_hat"
@@ -264,15 +269,13 @@ class ForecasterBase(object):
             dataframe containing the columns 'ds' and 'y'
         """
         y_hat = valid_features.y.copy()
-
         if self.detrend:
             trend_estimator = self.trend_estimator
             trend_dataframe = trend_estimator.predict(valid_features.loc[:, ["ds"]])
             y_hat -= trend_dataframe.trend.values
         if self.response_scaling:
             y_hat -= self.y_mean
-            y_hat /= self.y_std 
-            
+            y_hat /= self.y_std     
         return y_hat
 
     def _prepare_features(self, train_data, valid_period=None):
@@ -284,25 +287,51 @@ class ForecasterBase(object):
         valid_period: pandas.DataFrame
             Dataframe (with column 'ds') indicating the validation period.
         """
-        train_features,categorical_features = self._prepare_train_features(train_data)
-
+        train_features = self._prepare_train_features(train_data)
         if valid_period is not None:
             valid_features = self._prepare_valid_features(valid_period, train_features)
+            # removes validation period from train_features
             valid_start_time = valid_features.ds.min()
-            # removes validation period from train data
-            train_data = train_data.query("ds < @valid_start_time")
             train_features = train_features.query("ds < @valid_start_time")
-        
+        else:
+            valid_features = pd.DataFrame(columns=train_features.columns)
+
         train_features["y_hat"] = self._prepare_train_response(train_features)
         if valid_period is not None:
             valid_features["y_hat"] = self._prepare_valid_response(valid_features)
+        return train_features,valid_features
+    
+    def prepare_features(self, train_data, valid_period=None):
+        """
+        Parameters
+        ----------
+        train_data : pandas.DataFrame
+            Dataframe with at least columns 'ds' and 'y'.
+        valid_period: pandas.DataFrame
+            Dataframe (with column 'ds') indicating the validation period.
+        """
+        if len(self.ts_uid_columns) == 0:
+            train_features,valid_features =  self._prepare_features(train_data, valid_period)
+        else:
+            assert set(self.ts_uid_columns) <= set(train_data.columns), \
+                f"time series uid columns: {set(self.ts_uid_columns)-set(train_data.columns)} are missing."
+            all_train_features_chunks = list()
+            all_valid_features_chunks = list()
+            ts_uid_values = train_data.drop_duplicates(subset=self.ts_uid_columns)
+            for _,row in ts_uid_values.iterrows():
+                query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
+                train_data_chunk = train_data.query(query_string)
+                train_features_chunk,valid_features_chunk = self._prepare_features(train_data_chunk, valid_period)
+                all_train_features_chunks.append(train_features_chunk)
+                all_valid_features_chunks.append(valid_features_chunk)
+            train_features = pd.concat(all_train_features_chunks).reset_index(drop=True)
+            valid_features = pd.concat(all_valid_features_chunks).reset_index(drop=True)
         
         self.train_data = train_data
         self.train_features = train_features
         self.valid_period = valid_period
         self.valid_features = valid_features if valid_period is not None else None
-        self.categorical_features = categorical_features if self.categorical_encoding=="default" else list()
-        return self.train_features,self.valid_features
+        return self.train_features, self.valid_features
 
     def fit(self, train_data, valid_period=None):
         """
@@ -314,8 +343,16 @@ class ForecasterBase(object):
             Dataframe (with column 'ds') indicating the validation period.
         """
         self._validate_fit_inputs(train_data, valid_period)
-        train_features,valid_features = self._prepare_features(train_data, valid_period)
-        self.model.fit(train_features, valid_features, self.input_features, self.target, self.categorical_features)
+        train_features,valid_features = self.prepare_features(train_data, valid_period)
+        kwargs = {"train_features":train_features, 
+                  "valid_features":valid_features,
+                  "input_features":self.input_features,
+                  "target":self.target}
+        if self.categorical_encoding == "default":
+            kwargs["categorical_features"] = self.categorical_features
+        else:
+            kwargs["categorical_features"] = list()
+        self.model.fit(**kwargs)
         self.best_iteration = self.model.best_iteration
 
     def predict(self, predict_data):
@@ -352,8 +389,7 @@ class ForecasterBase(object):
             zero_response_mask = predict_features["zero_response"]==1
             prediction[zero_response_mask] = 0
 
-        self.predict_features = predict_features
-            
+        self.predict_features = predict_features     
         prediction_dataframe = pd.DataFrame({"ds":predict_data.ds, "y_pred":prediction})
         return prediction_dataframe 
 

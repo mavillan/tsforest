@@ -4,9 +4,8 @@ pd.options.mode.chained_assignment = None
 import calendar
 import h2o
 
-from tsforest.config import (calendar_sequential_features_types,
-                             calendar_cyclical_features_types,
-                             all_features_types)
+from tsforest.config import (calendar_features_names,
+                             calendar_cyclical_features_names)
 
 def fill_time_gaps(data, freq="D"):
     """
@@ -166,10 +165,10 @@ class FeaturesGenerator():
                             "ignore_const_cols":ignore_const_cols}
             calendar_features = compute_calendar_features(**input_params)
         if "calendar" not in self.include_features:
-            columns_to_drop = list(calendar_sequential_features_types.keys())
+            columns_to_drop = calendar_features_names
             calendar_features.drop(columns=columns_to_drop, inplace=True)
         elif "calendar_cyclical" not in self.include_features:
-            columns_to_drop = list(calendar_cyclical_features_types.keys())
+            columns_to_drop = calendar_cyclical_features_names
             calendar_features.drop(columns=columns_to_drop, inplace=True)
         all_features_list.append(calendar_features.set_index("ds"))
                 
@@ -191,9 +190,7 @@ class FeaturesGenerator():
                         .reset_index()
                         .rename({"index":"ds"}, axis=1)
                         .assign(y = lambda x: x["y"].fillna(0.)))
-        categorical_features = [feature for feature,dtype in all_features_types.items()
-                                if feature in all_features.columns and dtype=="categorical"]
-        return all_features,categorical_features
+        return all_features
         
     def compute_predict_features(self, data, ignore_const_cols=True):
         """
@@ -215,10 +212,10 @@ class FeaturesGenerator():
                             "ignore_const_cols":ignore_const_cols}
             calendar_features = compute_calendar_features(**input_params)
         if "calendar" not in self.include_features:
-            columns_to_drop = list(calendar_sequential_features_types.keys())
+            columns_to_drop = calendar_features_names
             calendar_features.drop(columns=columns_to_drop, inplace=True)
         elif "calendar_cyclical" not in self.include_features:
-            columns_to_drop = list(calendar_cyclical_features_types.keys())
+            columns_to_drop = calendar_cyclical_features_names
             calendar_features.drop(columns=columns_to_drop, inplace=True)
         all_features_list.append(calendar_features.set_index("ds"))
 
@@ -240,6 +237,4 @@ class FeaturesGenerator():
         all_features_list.append(data.set_index("ds"))
         all_features = pd.concat(all_features_list, axis=1)
         all_features.reset_index(inplace=True)
-        categorical_features = [feature for feature,dtype in all_features_types.items()
-                                if feature in all_features.columns and dtype=="categorical"]
-        return all_features,categorical_features
+        return all_features

@@ -60,45 +60,39 @@ prophet_kwargs_extra = {
     "yr_prior_scale"   : 10.
 } 
 
-# datatype of sequential calendar features
-calendar_sequential_features_types = {
-    "year":"numeric",
-    "quarter":"numeric",
-    "month":"categorical",
-    "days_in_month":"numeric",
-    "year_week":"numeric",
-    "year_day":"numeric",
-    "month_day":"numeric",
-    "week_day":"numeric",
-    "hour":"numeric",
-    "minute":"numeric",
-    "second":"numeric",
-    "millisecond":"numeric",
-    "microsecond":"numeric",
-    "nanosecond":"numeric",
-    "month_progress":"numeric"
-}
+# names of calendar features
+calendar_features_names = [
+    "year",
+    "quarter",
+    "month",
+    "days_in_month",
+    "year_week",
+    "year_day",
+    "month_day",
+    "week_day",
+    "hour",
+    "minute",
+    "second",
+    "millisecond",
+    "microsecond",
+    "nanosecond",
+    "month_progress"
+]
 
-# datatype of cyclical calendar features
-calendar_cyclical_features_types = {
-    "second_cos":"numeric",
-    "second_sin":"numeric",
-    "minute_cos":"numeric",
-    "minute_sin":"numeric",
-    "hour_cos":"numeric",
-    "hour_sin":"numeric",
-    "week_day_cos":"numeric",
-    "week_day_sin":"numeric",
-    "year_day_cos":"numeric",
-    "year_day_sin":"numeric",
-    "year_week_cos":"numeric",
-    "year_week_sin":"numeric",
-    "month_cos":"numeric",
-    "month_sin":"numeric"
-}
-
-# datatype of all features
-all_features_types = {
-    **calendar_sequential_features_types,
-    **calendar_cyclical_features_types
-}
+# names of cyclical calendar features
+calendar_cyclical_features_names = [
+    "second_cos",
+    "second_sin",
+    "minute_cos",
+    "minute_sin",
+    "hour_cos",
+    "hour_sin",
+    "week_day_cos",
+    "week_day_sin",
+    "year_day_cos",
+    "year_day_sin",
+    "year_week_cos",
+    "year_week_sin",
+    "month_cos",
+    "month_sin"
+]
