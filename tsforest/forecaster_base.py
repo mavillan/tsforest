@@ -3,9 +3,11 @@ import pandas as pd
 import category_encoders as ce
 from inspect import getmembers, isfunction
 
-from tsforest.features import FeaturesGenerator
-from tsforest.trend import TrendEstimator
+
 from tsforest import metrics
+from tsforest.trend import TrendEstimator
+from tsforest.features import (compute_train_features, 
+                               compute_predict_features)
 from tsforest.config import (calendar_features_names,
                              calendar_cyclical_features_names)
 
@@ -170,12 +172,12 @@ class ForecasterBase(object):
         train_data : pandas.DataFrame
             Dataframe with at least columns 'ds' and 'y'.
         """
-        features_generator = FeaturesGenerator(include_features=self.features,
-                                               lags=self.lags,
-                                               window_sizes=self.window_sizes,
-                                               window_functions=self.window_functions)
-        train_features = features_generator.compute_train_features(train_data)
-        self.features_generator = features_generator
+        train_features = compute_train_features(data=train_data,
+                                                include_features=self.features,
+                                                lags=self.lags,
+                                                window_sizes=self.window_sizes,
+                                                window_functions=self.window_functions,
+                                                ignore_const_cols=True)
         self.raw_features = train_features.columns
         self.input_features = [feature for feature in train_features.columns
                                if feature not in self.exclude_features]
@@ -219,8 +221,12 @@ class ForecasterBase(object):
             Dataframe containing all the features for making predictions with 
             the trained model.
         """
-        features_generator = self.features_generator
-        predict_features = features_generator.compute_predict_features(predict_data, ignore_const_cols=False)
+        predict_features = compute_predict_features(data=predict_data,
+                                                    include_features=self.features,
+                                                    lags=self.lags,
+                                                    window_sizes=self.window_sizes,
+                                                    window_functions=self.window_functions,
+                                                    ignore_const_cols=False)
         if "calendar_anomaly" in predict_features.columns:
             assert len(self.calendar_anomaly) != 0, \
                 "'calendar_anomaly' column found, but no names of affected features were provided."

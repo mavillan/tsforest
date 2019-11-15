@@ -1,11 +1,125 @@
 import numpy as np
 import pandas as pd
-pd.options.mode.chained_assignment = None
-import calendar
-import h2o
-
 from tsforest.config import (calendar_features_names,
                              calendar_cyclical_features_names)
+
+def compute_train_features(data, include_features, lags, window_sizes, window_functions, ignore_const_cols=True):
+    """
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Dataframe with (at least) columns: 'ds' and 'y'.
+    include_features: list
+        Features to included in computation.
+    lags: list
+        List of integer lag values.
+    window_sizes: list
+        List of integer window sizes values.
+    window_functions: list
+        List of string names of the window functions.
+    ignore_const_cols: bool
+        Specify whether to ignore constant columns.
+    Returns
+    ----------
+    all_features: pd.Dataframe
+        Dataframe containing all the features for the time series.
+    """
+    train_data = data
+    # in case of time gaps
+    filled_data = fill_time_gaps(data)
+
+    # list with all the dataframes of features
+    all_features_list = list()
+
+    # generating the calendar features
+    if {"calendar","calendar_cyclical"} & set(include_features):
+        input_params = {"date_range":pd.DatetimeIndex(data.ds),
+                        "ignore_const_cols":ignore_const_cols}
+        calendar_features = compute_calendar_features(**input_params)
+    if "calendar" not in include_features:
+        columns_to_drop = calendar_features_names
+        calendar_features.drop(columns=columns_to_drop, inplace=True)
+    elif "calendar_cyclical" not in include_features:
+        columns_to_drop = calendar_cyclical_features_names
+        calendar_features.drop(columns=columns_to_drop, inplace=True)
+    all_features_list.append(calendar_features.set_index("ds"))
+            
+    if "lag" in include_features:
+        lag_features = (compute_lag_features(filled_data, lags=lags)
+                        .merge(data.loc[:, ["ds"]], how="inner", on=["ds"]))
+        all_features_list.append(lag_features.set_index("ds"))
+
+    if "rw" in include_features:
+        rw_features = (compute_rw_features(filled_data, 
+                                            window_sizes=window_sizes, 
+                                            window_functions=window_functions)
+                        .merge(data.loc[:, ["ds"]], how="inner", on=["ds"]))
+        all_features_list.append(rw_features.set_index("ds"))
+
+    # merging all features
+    all_features_list.append(data.set_index("ds"))
+    all_features = (pd.concat(all_features_list, axis=1)
+                    .reset_index()
+                    .rename({"index":"ds"}, axis=1)
+                    .assign(y = lambda x: x["y"].fillna(0.)))
+    return all_features
+
+def compute_predict_features(data, include_features, lags, window_sizes, window_functions, ignore_const_cols=True):
+    """
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Dataframe with (at least) columns: 'ds' and 'y'.
+    include_features: list
+        Features to included in computation.
+    lags: list
+        List of integer lag values.
+    window_sizes: list
+        List of integer window sizes values.
+    window_functions: list
+        List of string names of the window functions.
+    ignore_const_cols: bool
+        Specify whether to ignore constant columns.
+    Returns
+    ----------
+    all_features: pd.Dataframe
+        Dataframe containing all the features for the time series.
+    """
+    # list with all the dataframes of features
+    all_features_list = list()
+
+    # generating the calendar features
+    if np.any(["calendar" in feat for feat in include_features]):
+        input_params = {"date_range":pd.DatetimeIndex(data.ds),
+                        "ignore_const_cols":ignore_const_cols}
+        calendar_features = compute_calendar_features(**input_params)
+    if "calendar" not in include_features:
+        columns_to_drop = calendar_features_names
+        calendar_features.drop(columns=columns_to_drop, inplace=True)
+    elif "calendar_cyclical" not in include_features:
+        columns_to_drop = calendar_cyclical_features_names
+        calendar_features.drop(columns=columns_to_drop, inplace=True)
+    all_features_list.append(calendar_features.set_index("ds"))
+
+    if "lag" in include_features:
+        column_names = [f"lag_{lag}" for lag in lags]
+        lag_features = pd.DataFrame(np.nan, index=data.ds, 
+                                    columns=column_names)
+        all_features_list.append(lag_features)
+
+    if "rw" in include_features:
+        column_names = [f"{window_func}_{window}"
+                        for window_func in window_functions
+                        for window in window_sizes]
+        rw_features = pd.DataFrame(np.nan, index=data.ds,
+                                    columns=column_names)
+        all_features_list.append(rw_features)
+    
+    # merging all features
+    all_features_list.append(data.set_index("ds"))
+    all_features = pd.concat(all_features_list, axis=1)
+    all_features.reset_index(inplace=True)
+    return all_features
 
 def fill_time_gaps(data, freq="D"):
     """
@@ -117,124 +231,3 @@ def compute_rw_features(data, window_sizes, window_functions):
     rw_features = pd.concat([data.ds] + features, axis=1)
     rw_features.columns = ["ds"] + features_names
     return rw_features
-
-class FeaturesGenerator():
-
-    def __init__(self, include_features, lags=None, window_sizes=None, 
-                 window_functions=None):
-        """
-        Parameters
-        ----------
-        include_features: list
-            Features to included in computation
-        lags: list
-            List of integer lag values
-        window_sizes: list
-            List of integer window sizes values
-        window_functions: list
-            List of string names of the window functions
-        """
-        self.include_features = include_features
-        self.lags = lags
-        self.window_sizes = window_sizes
-        self.window_functions = window_functions
-
-    def compute_train_features(self, data, ignore_const_cols=True):
-        """
-        Parameters
-        ----------
-        data : pd.DataFrame
-            Dataframe with (at least) columns: 'ds' and 'y'
-        ignore_const_cols: bool
-            Specify whether to ignore constant columns.
-        Returns
-        ----------
-        all_features: pd.Dataframe
-            Dataframe containing all the features for the time series
-        """
-        self.train_data = data
-        # in case of time gaps
-        filled_data = fill_time_gaps(data)
-
-        # list with all the dataframes of features
-        all_features_list = list()
-
-        # generating the calendar features
-        if {"calendar","calendar_cyclical"} & set(self.include_features):
-            input_params = {"date_range":pd.DatetimeIndex(data.ds),
-                            "ignore_const_cols":ignore_const_cols}
-            calendar_features = compute_calendar_features(**input_params)
-        if "calendar" not in self.include_features:
-            columns_to_drop = calendar_features_names
-            calendar_features.drop(columns=columns_to_drop, inplace=True)
-        elif "calendar_cyclical" not in self.include_features:
-            columns_to_drop = calendar_cyclical_features_names
-            calendar_features.drop(columns=columns_to_drop, inplace=True)
-        all_features_list.append(calendar_features.set_index("ds"))
-                
-        if "lag" in self.include_features:
-            lag_features = (compute_lag_features(filled_data, lags=self.lags)
-                            .merge(data.loc[:, ["ds"]], how="inner", on=["ds"]))
-            all_features_list.append(lag_features.set_index("ds"))
-
-        if "rw" in self.include_features:
-            rw_features = (compute_rw_features(filled_data, 
-                                               window_sizes=self.window_sizes, 
-                                               window_functions=self.window_functions)
-                           .merge(data.loc[:, ["ds"]], how="inner", on=["ds"]))
-            all_features_list.append(rw_features.set_index("ds"))
-
-        # merging all features
-        all_features_list.append(data.set_index("ds"))
-        all_features = (pd.concat(all_features_list, axis=1)
-                        .reset_index()
-                        .rename({"index":"ds"}, axis=1)
-                        .assign(y = lambda x: x["y"].fillna(0.)))
-        return all_features
-        
-    def compute_predict_features(self, data, ignore_const_cols=True):
-        """
-        Parameters
-        ----------
-        data: pandas.DataFrame
-            Dataframe with (at least) column: 'ds'
-        ignore_const_cols: bool
-            Specify whether to ignore constant columns.
-        """
-        self.predict_data = data
-
-        # list with all the dataframes of features
-        all_features_list = list()
-
-        # generating the calendar features
-        if np.any(["calendar" in feat for feat in self.include_features]):
-            input_params = {"date_range":pd.DatetimeIndex(data.ds),
-                            "ignore_const_cols":ignore_const_cols}
-            calendar_features = compute_calendar_features(**input_params)
-        if "calendar" not in self.include_features:
-            columns_to_drop = calendar_features_names
-            calendar_features.drop(columns=columns_to_drop, inplace=True)
-        elif "calendar_cyclical" not in self.include_features:
-            columns_to_drop = calendar_cyclical_features_names
-            calendar_features.drop(columns=columns_to_drop, inplace=True)
-        all_features_list.append(calendar_features.set_index("ds"))
-
-        if "lag" in self.include_features:
-            column_names = [f"lag_{lag}" for lag in self.lags]
-            lag_features = pd.DataFrame(np.nan, index=data.ds, 
-                                        columns=column_names)
-            all_features_list.append(lag_features)
-    
-        if "rw" in self.include_features:
-            column_names = [f"{window_func}_{window}"
-                            for window_func in self.window_functions
-                            for window in self.window_sizes]
-            rw_features = pd.DataFrame(np.nan, index=data.ds,
-                                       columns=column_names)
-            all_features_list.append(rw_features)
-        
-        # merging all features
-        all_features_list.append(data.set_index("ds"))
-        all_features = pd.concat(all_features_list, axis=1)
-        all_features.reset_index(inplace=True)
-        return all_features
