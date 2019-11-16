@@ -32,8 +32,10 @@ class GridSearch(object):
         List of names of calendar features affected by an anomaly.
     detrend: bool
         Whether or not to remove the trend from time serie.
-    response_scaling:
-        Whether or not to perform scaling of the reponse variable.
+    response_scaler: str
+        Class in sklearn.preprocessing to perform scaling of the response variable.
+    response_scaler_kwargs: dict
+        Extra arguments passed to the response_scaler class constructor when instantiating.
     lags: list
         List of integer lag values.
     window_sizes: list
@@ -50,9 +52,9 @@ class GridSearch(object):
 
     def __init__(self, model_class, features=["calendar", "calendar_cyclical"], 
                  categorical_features=list(), categorical_encoding="default", 
-                 calendar_anomaly=list(), detrend=True, response_scaling=False, 
-                 lags=None, window_sizes=None, window_functions=None, 
-                 hyperparams=dict(), hyperparams_fixed=dict(), 
+                 calendar_anomaly=list(), detrend=True, response_scaler="StandardScaler", 
+                 response_scaler_kwargs=dict(), lags=None, window_sizes=None, 
+                 window_functions=None, hyperparams=dict(), hyperparams_fixed=dict(), 
                  n_jobs=-1):
         self.model_class = model_class
         self.features = features
@@ -60,7 +62,8 @@ class GridSearch(object):
         self.categorical_encoding = categorical_encoding
         self.calendar_anomaly = calendar_anomaly
         self.detrend = detrend
-        self.response_scaling = response_scaling
+        self.response_scaler = response_scaler
+        self.response_scaler_kwargs = response_scaler_kwargs
         self.lags = lags
         self.window_sizes = window_sizes
         self.window_functions = window_functions
@@ -102,7 +105,8 @@ class GridSearch(object):
                         "categorical_encoding":self.categorical_encoding,
                         "calendar_anomaly":self.calendar_anomaly,
                         "detrend":self.detrend,
-                        "response_scaling":self.response_scaling,
+                        "response_scaler":self.response_scaler,
+                        "response_scaler_kwargs":self.response_scaler_kwargs,
                         "lags":self.lags,
                         "window_sizes":self.window_sizes,
                         "window_functions":self.window_functions}

@@ -1,9 +1,8 @@
 import numpy as np
 import pandas as pd
+from sklearn import preprocessing
 import category_encoders as ce
 from inspect import getmembers, isfunction
-
-
 from tsforest import metrics
 from tsforest.trend import TrendEstimator
 from tsforest.features import (compute_train_features, 
@@ -14,6 +13,9 @@ from tsforest.config import (calendar_features_names,
 # available methods in pandas.core.window.Rolling as of pandas 0.25.1 
 AVAILABLE_RW_FUNCTIONS = ["count", "sum", "mean", "median", "var", "std", "min", 
                           "max", "corr", "cov", "skew", "kurt", "quantile"]
+
+AVAILABLE_SCALERS = ["MaxAbsScaler", "MinMaxScaler", "Normalizer", 
+                     "RobustScaler", "StandardScaler"]
 
 AVAILABLE_METRICS = [member[0].split('_')[1] for member in getmembers(metrics) 
                      if isfunction(member[1])]
@@ -38,8 +40,10 @@ class ForecasterBase(object):
         List of columns names that are unique identifiers for time series.
     detrend: bool
         Whether or not to remove the trend from time series.
-    response_scaling:
-        Whether or not to perform scaling of the reponse variable.
+    response_scaler: str
+        Class in sklearn.preprocessing to perform scaling of the response variable.
+    response_scaler_kwargs: dict
+        Extra arguments passed to the response_scaler class constructor when instantiating.
     lags: list
         List of integer lag values.
     window_sizes: list
@@ -49,8 +53,8 @@ class ForecasterBase(object):
     """
     def __init__(self, model_params=dict(), features=["calendar", "calendar_cyclical"], 
                  exclude_features=list(), categorical_features=list(), categorical_encoding="default", 
-                 calendar_anomaly=list(), ts_uid_columns=list(), detrend=True, response_scaling=False, 
-                 lags=None, window_sizes=None, window_functions=None):
+                 calendar_anomaly=list(), ts_uid_columns=list(), detrend=True, response_scaler="StandardScaler",
+                 response_scaler_kwargs=dict(), lags=None, window_sizes=None, window_functions=None):
 
         if lags is not None and "lag" not in features:
             features.append("lag")
@@ -67,7 +71,8 @@ class ForecasterBase(object):
         self.calendar_anomaly = calendar_anomaly
         self.ts_uid_columns = ts_uid_columns
         self.detrend = detrend
-        self.response_scaling = response_scaling
+        self.response_scaler = response_scaler
+        self.response_scaler_kwargs = response_scaler_kwargs
         self.lags = lags
         self.window_sizes = window_sizes
         self.window_functions = window_functions
@@ -98,8 +103,14 @@ class ForecasterBase(object):
         if not isinstance(self.detrend, bool):
             raise TypeError("Parameter 'detrend' should be of type 'bool'.")
 
-        if not isinstance(self.response_scaling, bool):
-            raise TypeError("Parameter 'response_scaling' should be of type 'bool'.")
+        if self.response_scaler is not None:
+            if not isinstance(self.response_scaler, str):
+                raise TypeError("Parameter 'response_scaler' should be of type 'str'.")
+            elif self.response_scaler not in AVAILABLE_SCALERS:
+                raise ValueError(f"Parameter 'response_scaler' should be any of: {AVAILABLE_SCALERS}.")
+        
+        if not isinstance(self.response_scaler_kwargs, dict):
+            raise TypeError("Parameter 'response_scaler_kwargs' should be of type 'dict'.")
 
         if self.lags is not None:
             if not isinstance(self.lags, list):
@@ -198,6 +209,8 @@ class ForecasterBase(object):
     
     def _prepare_valid_features(self, valid_period, train_features):
         """
+        Parameters
+        ----------
         valid_period : pandas.DataFrame
             Dataframe with column 'ds' indicating the validation period.
         train_features: pandas.DataFrame
@@ -248,20 +261,18 @@ class ForecasterBase(object):
         train_features: pd.DataFrame
             Dataframe containing the columns 'ds' and 'y'.
         """
-        y_hat = train_features.y.copy()
+        y_hat = train_features.y.values.copy()
         if self.detrend:
             trend_estimator = TrendEstimator()
             trend_estimator.fit(data=train_features.loc[:, ["ds", "y"]])
             trend_dataframe = trend_estimator.predict(train_features.loc[:, ["ds"]])
             y_hat -= trend_dataframe.trend.values
             self.trend_estimator = trend_estimator
-        if self.response_scaling:
-            y_mean = y_hat.mean()
-            y_std = y_hat.std()
-            y_hat -= y_mean
-            y_hat /= y_std 
-        self.y_mean = y_mean if "y_mean" in locals() else None
-        self.y_std  = y_std if "y_std" in locals() else None
+        if self.response_scaler is not None:
+            scaler_class = getattr(preprocessing, self.response_scaler)
+            scaler = scaler_class(**self.response_scaler_kwargs)
+            y_hat = scaler.fit_transform(y_hat.reshape(-1,1)).ravel()
+            self.scaler = scaler
         self.target = "y_hat"
         return y_hat
     
@@ -274,14 +285,13 @@ class ForecasterBase(object):
         valid_features: pd.DataFrame
             dataframe containing the columns 'ds' and 'y'
         """
-        y_hat = valid_features.y.copy()
+        y_hat = valid_features.y.values.copy()
         if self.detrend:
             trend_estimator = self.trend_estimator
             trend_dataframe = trend_estimator.predict(valid_features.loc[:, ["ds"]])
             y_hat -= trend_dataframe.trend.values
-        if self.response_scaling:
-            y_hat -= self.y_mean
-            y_hat /= self.y_std     
+        if self.response_scaler is not None:
+            y_hat = self.scaler.transform(y_hat.reshape(-1,1)).ravel()
         return y_hat
 
     def _prepare_features(self, train_data, valid_period=None):
@@ -302,9 +312,9 @@ class ForecasterBase(object):
         else:
             valid_features = pd.DataFrame(columns=train_features.columns)
 
-        train_features["y_hat"] = self._prepare_train_response(train_features)
+        train_features.loc[:, "y_hat"] = self._prepare_train_response(train_features)
         if valid_period is not None:
-            valid_features["y_hat"] = self._prepare_valid_response(valid_features)
+            valid_features.loc[:, "y_hat"] = self._prepare_valid_response(valid_features)
         return train_features,valid_features
     
     def prepare_features(self, train_data, valid_period=None):
@@ -386,9 +396,8 @@ class ForecasterBase(object):
         else:
             prediction = self.model.predict(predict_features)
         
-        if self.response_scaling:
-            prediction *= self.y_std
-            prediction += self.y_mean
+        if self.response_scaler is not None:
+            prediction = self.scaler.transform(prediction.reshape(-1,1)).ravel()
         if self.detrend:
             prediction += trend_dataframe.trend.values
         if "zero_response" in predict_features.columns:
@@ -425,9 +434,8 @@ class ForecasterBase(object):
                         predict_features.loc[idx, f"{window_func}_{window}"] = getattr(np, window_func)(y[-window:])
             y_pred = model.predict(predict_features.loc[[idx], self.input_features])
             prediction.append(y_pred.copy())
-            if self.response_scaling:
-                y_pred *= self.y_std
-                y_pred += self.y_mean
+            if self.response_scaler is not None:
+                y_pred = self.scaler.transform(y_pred.reshape(-1,1)).ravel()
             if self.detrend:
                 y_pred += trend_dataframe.loc[idx, "trend"]
             y = np.append(y, [y_pred])
