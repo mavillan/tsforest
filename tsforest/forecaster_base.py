@@ -264,7 +264,7 @@ class ForecasterBase(object):
             Time in which data is cut for training trend estimator and target scaler.
         """
         data_cut = data.query("ds < @time_cut") if time_cut is not None else data
-        y_target = data.y.values.copy()
+        y_target = data.y.values.copy().astype(float)
         if self.detrend:
             trend_estimator = TrendEstimator()
             trend_estimator.fit(data=data_cut.loc[:, ["ds", "y"]])
@@ -313,6 +313,7 @@ class ForecasterBase(object):
         valid_period: pandas.DataFrame
             Dataframe (with column 'ds') indicating the validation period.
         """
+        train_data = train_data.copy()
         if len(self.ts_uid_columns) == 0:
             train_features,valid_features,trend_estimator,scaler =  self._prepare_features(train_data, valid_period)
             self.trend_estimator = trend_estimator
@@ -391,7 +392,7 @@ class ForecasterBase(object):
             else:
                 prediction = self.model.predict(predict_features)
             if self.response_scaler is not None:
-                prediction = self.scaler.transform(prediction.reshape(-1,1)).ravel()
+                prediction = self.scaler.inverse_transform(prediction.reshape(-1,1)).ravel()
             if self.detrend:
                 trend_dataframe = self.trend_estimator.predict(predict_data.loc[:, ["ds"]])
                 prediction += trend_dataframe.trend.values
