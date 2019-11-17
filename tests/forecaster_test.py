@@ -141,3 +141,19 @@ class TestForecaster(unittest.TestCase):
 
         assert type(error)==np.float64, \
             f'fcaster.evaluate returns {error} which is not of type numpy.float64'
+    
+    def test_it_fit_evaluate_with_bounded_error(self):
+        data = pd.read_csv(self.data_path, parse_dates=['ds'])
+        train_data = data.query('ds < "2019-06-01"')
+        eval_data = data.query('ds >= "2019-06-01"')
+
+        model_kwargs = {"model_params":get_default_model_params(self.model_class),
+                        "features":['calendar', 'calendar_cyclical']}
+        if "data_many_ts" in self.data_path:
+            model_kwargs["ts_uid_columns"] = ["ts_uid"]
+        fcaster = self.model_class(**model_kwargs)
+        fcaster.fit(train_data=train_data)
+        error = fcaster.evaluate(eval_data)
+
+        assert error <= 2, \
+            f"fcaster.evaluate returns error=={error} which is greater than 2."
