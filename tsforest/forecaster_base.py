@@ -325,7 +325,7 @@ class ForecasterBase(object):
             scalers = dict()
             all_train_features_chunks = list()
             all_valid_features_chunks = list()
-            ts_uid_values = train_data.drop_duplicates(subset=self.ts_uid_columns)
+            ts_uid_values = train_data.loc[:, self.ts_uid_columns].drop_duplicates()
             for _,row in ts_uid_values.iterrows():
                 query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
                 train_data_chunk = train_data.query(query_string)
@@ -338,7 +338,7 @@ class ForecasterBase(object):
             train_features = pd.concat(all_train_features_chunks).reset_index(drop=True)
             valid_features = pd.concat(all_valid_features_chunks).reset_index(drop=True)
             self.trend_estimators = trend_estimators
-            self.scalers = self.scalers
+            self.scalers = scalers
 
         self.raw_features = train_features.columns
         self.input_features = [feature for feature in train_features.columns
@@ -388,7 +388,11 @@ class ForecasterBase(object):
         if len(self.ts_uid_columns) == 0:
             predict_features = self._prepare_predict_features(predict_data)
             if "lag" in self.features or "rw" in self.features:
-                prediction = self._predict(self.model, predict_features)
+                y_train = self.train_features.y.values
+                y_valid = self.valid_features.y.values \
+                          if self.valid_period is not None else np.array([])
+                y_past = np.concatenate([y_train, y_valid])
+                prediction = self._predict(self.model, predict_features, y_past)
             else:
                 prediction = self.model.predict(predict_features)
             if self.response_scaler is not None:
@@ -399,14 +403,41 @@ class ForecasterBase(object):
             if "zero_response" in predict_features.columns:
                 zero_response_mask = predict_features["zero_response"]==1
                 prediction[zero_response_mask] = 0
+            prediction_dataframe = pd.DataFrame({"ds":predict_data.ds, "y_pred":prediction})
         else:
-            pass
+            ts_uid_values = predict_data.loc[:, self.ts_uid_columns].drop_duplicates()
+            all_prediction_dataframes = list()
+            for _,row in ts_uid_values.iterrows():
+                query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
+                predict_data_chunk = predict_data.query(query_string)
+                predict_features = self._prepare_predict_features(predict_data_chunk)
+                if "lag" in self.features or "rw" in self.features:
+                    y_train = self.train_features.query(query_string).y.values
+                    y_valid = self.valid_features.query(query_string).y.values \
+                              if self.valid_period is not None else np.array([])
+                    y_past = np.concatenate([y_train, y_valid])
+                    prediction = self._predict(self.model, predict_features, y_past)
+                else:
+                    prediction = self.model.predict(predict_features)
 
-        self.predict_features = predict_features     
-        prediction_dataframe = pd.DataFrame({"ds":predict_data.ds, "y_pred":prediction})
+                key = tuple([item for _,item in row.iteritems()])
+                if self.response_scaler is not None:
+                    prediction = self.scalers[key].inverse_transform(prediction.reshape(-1,1)).ravel()
+                if self.detrend:
+                    trend_dataframe = self.trend_estimators[key].predict(predict_data_chunk.loc[:, ["ds"]])
+                    prediction += trend_dataframe.trend.values
+                if "zero_response" in predict_features.columns:
+                    zero_response_mask = predict_features["zero_response"]==1
+                    prediction[zero_response_mask] = 0
+                
+                _prediction_dataframe = pd.DataFrame({**{"ds":predict_data_chunk.ds, "y_pred":prediction}, 
+                                                      **dict(row.iteritems())})
+                all_prediction_dataframes.append(_prediction_dataframe)
+            prediction_dataframe = pd.concat(all_prediction_dataframes).reset_index(drop=True)
+
         return prediction_dataframe 
 
-    def _predict(self, model, predict_features):
+    def _predict(self, model, predict_features, y_past):
         """
         Parameters
         ----------
@@ -414,12 +445,10 @@ class ForecasterBase(object):
             Instance model of tsforest.forest module.
         predict_features: pandas.DataFrame
             Datafame containing the features for the prediction period.
+        y_past: np.ndarray
+            Array with the values of 'y' previous to the prediction period.
         """
-        y_train = self.train_features.y.values
-        y_valid = self.valid_features.y.values \
-                  if self.valid_period is not None else np.array([])
-        y = np.concatenate([y_train, y_valid]).tolist()
-
+        y = y_past.tolist()
         for idx in predict_features.index:
             if "lag" in self.features:
                 for lag in self.lags:
