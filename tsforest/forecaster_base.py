@@ -20,6 +20,9 @@ AVAILABLE_SCALERS = ["MaxAbsScaler", "MinMaxScaler", "Normalizer",
 AVAILABLE_METRICS = [member[0].split('_')[1] for member in getmembers(metrics) 
                      if isfunction(member[1])]
 
+AVAILABLE_ENCODERS = [member[1] for member in getmembers(ce)
+                      if member[0]=="__all__"][0] + ["default"]
+
 class ForecasterBase(object):
     """
     Parameters
@@ -30,20 +33,19 @@ class ForecasterBase(object):
         List of features to be included.
     exclude_features: list
         List of features to be excluded from training dataframe.
-    categorical_features: list
-        List of names of features to be treated as categorical.
-    categorical_encoding: str
-        String name of categorical encoding to use.
+    categorical_features: dict
+        Dict with the name of the categorical feature as keys, and the name
+        of the class in 'category_encoders' to be used for encoding as values.
     calendar_anomaly: list
         List of names of calendar features affected by an anomaly.
     ts_uid_columns: list
         List of columns names that are unique identifiers for time series.
     detrend: bool
         Whether or not to remove the trend from time series.
-    response_scaler: str
-        Class in sklearn.preprocessing to perform scaling of the response variable.
-    response_scaler_kwargs: dict
-        Extra arguments passed to the response_scaler class constructor when instantiating.
+    target_scaler: str
+        Class in sklearn.preprocessing to perform scaling of the target variable.
+    target_scaler_kwargs: dict
+        Extra arguments passed to the target_scaler class constructor when instantiating.
     lags: list
         List of integer lag values.
     window_sizes: list
@@ -52,9 +54,9 @@ class ForecasterBase(object):
         List of string names of the window functions.
     """
     def __init__(self, model_params=dict(), features=["calendar", "calendar_cyclical"], 
-                 exclude_features=list(), categorical_features=list(), categorical_encoding="default", 
-                 calendar_anomaly=list(), ts_uid_columns=list(), detrend=True, response_scaler="StandardScaler",
-                 response_scaler_kwargs=dict(), lags=None, window_sizes=None, window_functions=None):
+                 exclude_features=list(), categorical_features=dict(), calendar_anomaly=list(), 
+                 ts_uid_columns=list(), detrend=True, target_scaler="StandardScaler",
+                 target_scaler_kwargs=dict(), lags=None, window_sizes=None, window_functions=None):
 
         if lags is not None and "lag" not in features:
             features.append("lag")
@@ -64,15 +66,17 @@ class ForecasterBase(object):
         self.model = None
         self.model_params = model_params
         self.features = features
-        self.exclude_features = ["ds", "y", "weight", "fold_column",
+        self.exclude_features = ["ds", "y", "y_raw", "weight", "fold_column",
                                  "zero_response", "calendar_anomaly"] + exclude_features
         self.categorical_features = categorical_features
-        self.categorical_encoding = categorical_encoding
         self.calendar_anomaly = calendar_anomaly
         self.ts_uid_columns = ts_uid_columns
+        for ts_uid_column in ts_uid_columns:
+            if ts_uid_column in self.categorical_features: continue
+            self.categorical_features[ts_uid_column] = "default"
         self.detrend = detrend
-        self.response_scaler = response_scaler
-        self.response_scaler_kwargs = response_scaler_kwargs
+        self.target_scaler = target_scaler
+        self.target_scaler_kwargs = target_scaler_kwargs
         self.lags = lags
         self.window_sizes = window_sizes
         self.window_functions = window_functions
@@ -91,8 +95,11 @@ class ForecasterBase(object):
             if any([x not in ["calendar", "calendar_cyclical", "lag", "rw"] for x in self.features]):
                 raise ValueError("Values in 'features' should be any of: ['calendar', 'calendar_cyclical', 'lag', 'rw'].")
         
-        if not isinstance(self.categorical_features, list):
-            raise TypeError("Parameter 'categorical_features' should be of type 'list'.")
+        if not isinstance(self.categorical_features, dict):
+            raise TypeError("Parameter 'categorical_features' should be of type 'dict'.")
+        else:
+            if any([encoding not in AVAILABLE_ENCODERS for encoding in self.categorical_features.values()]):
+                raise ValueError(f"Values in 'categorical_features' should be any of: {AVAILABLE_ENCODERS}")
 
         if not isinstance(self.calendar_anomaly, list):
             raise TypeError("Parameter 'calendar_anomaly' should be of type 'list'.")
@@ -103,14 +110,14 @@ class ForecasterBase(object):
         if not isinstance(self.detrend, bool):
             raise TypeError("Parameter 'detrend' should be of type 'bool'.")
 
-        if self.response_scaler is not None:
-            if not isinstance(self.response_scaler, str):
-                raise TypeError("Parameter 'response_scaler' should be of type 'str'.")
-            elif self.response_scaler not in AVAILABLE_SCALERS:
-                raise ValueError(f"Parameter 'response_scaler' should be any of: {AVAILABLE_SCALERS}.")
+        if self.target_scaler is not None:
+            if not isinstance(self.target_scaler, str):
+                raise TypeError("Parameter 'target_scaler' should be of type 'str'.")
+            elif self.target_scaler not in AVAILABLE_SCALERS:
+                raise ValueError(f"Parameter 'target_scaler' should be any of: {AVAILABLE_SCALERS}.")
         
-        if not isinstance(self.response_scaler_kwargs, dict):
-            raise TypeError("Parameter 'response_scaler_kwargs' should be of type 'dict'.")
+        if not isinstance(self.target_scaler_kwargs, dict):
+            raise TypeError("Parameter 'target_scaler_kwargs' should be of type 'dict'.")
 
         if self.lags is not None:
             if not isinstance(self.lags, list):
@@ -167,14 +174,22 @@ class ForecasterBase(object):
             raise TypeError("'metric' should be of type str.")
         elif metric not in AVAILABLE_METRICS:
             raise ValueError(f"'metric' should be any of these: {AVAILABLE_METRICS}")
-
-    def _apply_encoding(self, train_features, input_features, categorical_features, categorical_encoding):
-        train_features = train_features.copy()
-        encoder_class = getattr(ce, categorical_encoding)
-        encoder = encoder_class(cols=categorical_features)
-        encoder.fit(train_features.loc[:, input_features], train_features.loc[:, 'y'].values)
-        train_features.loc[:, input_features] = encoder.transform(train_features.loc[:, input_features])
-        return train_features,encoder
+    
+    def _encode_categorical_features(self, train_features, categorical_features, ts_uid_columns):
+        categorical_encoders = dict()
+        for feature,encoding in categorical_features.items():
+            if encoding == "default": continue
+            encoder_class = getattr(ce, encoding)
+            encoder = encoder_class(cols=[feature])
+            if feature in ts_uid_columns:
+                encoder.fit(train_features.loc[:, [feature]], train_features.loc[:, "y_raw"].values)
+            else:
+                encoder.fit(train_features.loc[:, [feature]], train_features.loc[:, "y"].values)
+            transformed = encoder.transform(train_features.loc[:, [feature]])
+            del train_features[feature]
+            train_features[transformed.columns] = transformed 
+            categorical_encoders[feature] = encoder
+        return train_features,categorical_encoders
       
     def _prepare_train_features(self, train_data):
         """
@@ -189,9 +204,6 @@ class ForecasterBase(object):
                                                 window_sizes=self.window_sizes,
                                                 window_functions=self.window_functions,
                                                 ignore_const_cols=True)
-        input_features = [feature for feature in train_features.columns
-                          if feature not in self.exclude_features]
-
         if "zero_response" in train_features.columns:
             train_features = train_features.query("zero_response != 1")
         if "calendar_anomaly" in train_features.columns:
@@ -201,9 +213,6 @@ class ForecasterBase(object):
                 f"Calendar anomaly affected columns: {set(self.calendar_anomaly)-set(train_features.columns)} are not present in 'train_features'."
             idx = train_features.query("calendar_anomaly == 1").index
             train_features.loc[idx, self.calendar_anomaly] = np.nan
-        if self.categorical_encoding != "default":
-            train_features,encoder = self._apply_encoding(train_features, input_features, self.categorical_features, self.categorical_encoding)
-            self.encoder = encoder
         return train_features
     
     def _prepare_valid_features(self, valid_period, train_features):
@@ -247,8 +256,12 @@ class ForecasterBase(object):
                 f"Calendar anomaly affected columns: {set(self.calendar_anomaly)-set(train_features.columns)} are not present in 'train_features'."
             idx = predict_features.query("calendar_anomaly == 1").index
             predict_features.loc[idx, self.calendar_anomaly] = np.nan
-        if self.categorical_encoding != "default":
-            predict_features.loc[:, self.input_features] = self.encoder.transform(predict_features.loc[:, self.input_features])
+        if len(self.categorical_features) > 0:
+            for feature,encoder in self.categorical_encoders.items():
+                transformed = encoder.transform(predict_features.loc[:, [feature]])
+                del predict_features[feature]
+                predict_features[transformed.columns] = transformed 
+
         features_to_keep = [feature for feature in predict_features.columns if feature in self.raw_features]
         return predict_features.loc[:, features_to_keep]
     
@@ -272,9 +285,9 @@ class ForecasterBase(object):
             y_target -= trend_dataframe.trend.values
         else:
             trend_estimator = None   
-        if self.response_scaler is not None:
-            scaler_class = getattr(preprocessing, self.response_scaler)
-            scaler = scaler_class(**self.response_scaler_kwargs)
+        if self.target_scaler is not None:
+            scaler_class = getattr(preprocessing, self.target_scaler)
+            scaler = scaler_class(**self.target_scaler_kwargs)
             scaler.fit(y_target[0:len(data_cut)].reshape(-1,1))
             y_target = scaler.transform(y_target.reshape(-1,1)).ravel()
         else:
@@ -293,6 +306,7 @@ class ForecasterBase(object):
         time_cut = valid_period.ds.min() if valid_period is not None else None
         y_target,trend_estimator,scaler = self._prepare_target(train_data,
                                                                time_cut=time_cut)
+        train_data["y_raw"] = train_data.loc[:, "y"].copy()
         train_data.loc[:, "y"] = y_target
         train_features = self._prepare_train_features(train_data)
         if valid_period is not None:
@@ -323,22 +337,30 @@ class ForecasterBase(object):
                 f"time series uid columns: {set(self.ts_uid_columns)-set(train_data.columns)} are missing."
             trend_estimators = dict()
             scalers = dict()
-            all_train_features_chunks = list()
-            all_valid_features_chunks = list()
+            all_train_features = list()
+            all_valid_features = list()
             ts_uid_values = train_data.loc[:, self.ts_uid_columns].drop_duplicates()
             for _,row in ts_uid_values.iterrows():
                 query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
                 train_data_chunk = train_data.query(query_string)
-                train_features_chunk,valid_features_chunk,trend_estimator,scaler = self._prepare_features(train_data_chunk, valid_period)
-                all_train_features_chunks.append(train_features_chunk)
-                all_valid_features_chunks.append(valid_features_chunk)
+                train_features,valid_features,trend_estimator,scaler = self._prepare_features(train_data_chunk, valid_period)
+                all_train_features.append(train_features)
+                all_valid_features.append(valid_features)
                 key = tuple([item for _,item in row.iteritems()])
                 trend_estimators[key] = trend_estimator
                 scalers[key] = scaler
-            train_features = pd.concat(all_train_features_chunks).reset_index(drop=True)
-            valid_features = pd.concat(all_valid_features_chunks).reset_index(drop=True)
+            train_features = pd.concat(all_train_features).reset_index(drop=True)
+            valid_features = pd.concat(all_valid_features).reset_index(drop=True)
             self.trend_estimators = trend_estimators
             self.scalers = scalers
+        
+        if len(self.categorical_features) > 0:
+            train_features,categorical_encoders = self._encode_categorical_features(train_features, self.categorical_features, self.ts_uid_columns)
+            self.categorical_encoders = categorical_encoders
+        # categorical features encoded by the tree/boosting model
+        _categorical_features = [feature for feature,encoder in self.categorical_features.items() 
+                                 if encoder == "default"]
+        self._categorical_features = _categorical_features
 
         self.raw_features = train_features.columns
         self.input_features = [feature for feature in train_features.columns
@@ -363,11 +385,8 @@ class ForecasterBase(object):
         kwargs = {"train_features":train_features, 
                   "valid_features":valid_features,
                   "input_features":self.input_features,
+                  "categorical_features":self._categorical_features,
                   "target":"y"}
-        if self.categorical_encoding == "default":
-            kwargs["categorical_features"] = self.categorical_features
-        else:
-            kwargs["categorical_features"] = list()
         self.model.fit(**kwargs)
         self.best_iteration = self.model.best_iteration
 
@@ -395,7 +414,7 @@ class ForecasterBase(object):
                 prediction = self._predict(self.model, predict_features, y_past)
             else:
                 prediction = self.model.predict(predict_features)
-            if self.response_scaler is not None:
+            if self.target_scaler is not None:
                 prediction = self.scaler.inverse_transform(prediction.reshape(-1,1)).ravel()
             if self.detrend:
                 trend_dataframe = self.trend_estimator.predict(predict_data.loc[:, ["ds"]])
@@ -421,7 +440,7 @@ class ForecasterBase(object):
                     prediction = self.model.predict(predict_features)
 
                 key = tuple([item for _,item in row.iteritems()])
-                if self.response_scaler is not None:
+                if self.target_scaler is not None:
                     prediction = self.scalers[key].inverse_transform(prediction.reshape(-1,1)).ravel()
                 if self.detrend:
                     trend_dataframe = self.trend_estimators[key].predict(predict_data_chunk.loc[:, ["ds"]])

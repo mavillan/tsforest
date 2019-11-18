@@ -23,5 +23,6 @@ class XGBoostForecaster(ForecasterBase):
     def __init__(self, *args, **kwargs):
         super(XGBoostForecaster, self).__init__(*args, **kwargs)
         self.model = XGBoostRegressor(kwargs['model_params'])
-        if self.categorical_encoding == "default":
-            self.categorical_encoding = "CatBoostEncoder"
+        for feature,encoding in self.categorical_features.items():
+            if encoding == "default":
+                self.categorical_features[feature] = "CatBoostEncoder"

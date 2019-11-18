@@ -24,18 +24,17 @@ class GridSearch(object):
         Class of the model to be instantiated.
     features: list
         List of features to be included.
-    categorical_features: list
-        List of names of categorical features.
-    categorical_encoding: str
-        String name of categorical encoding to use.
+    categorical_features: dict
+        Dict with the name of the categorical feature as keys, and the name
+        of the class in 'category_encoders' to be used for encoding as values.
     calendar_anomaly: list
         List of names of calendar features affected by an anomaly.
     detrend: bool
         Whether or not to remove the trend from time serie.
-    response_scaler: str
-        Class in sklearn.preprocessing to perform scaling of the response variable.
-    response_scaler_kwargs: dict
-        Extra arguments passed to the response_scaler class constructor when instantiating.
+    target_scaler: str
+        Class in sklearn.preprocessing to perform scaling of the target variable.
+    target_scaler_kwargs: dict
+        Extra arguments passed to the target_scaler class constructor when instantiating.
     lags: list
         List of integer lag values.
     window_sizes: list
@@ -51,19 +50,17 @@ class GridSearch(object):
     """
 
     def __init__(self, model_class, features=["calendar", "calendar_cyclical"], 
-                 categorical_features=list(), categorical_encoding="default", 
-                 calendar_anomaly=list(), detrend=True, response_scaler="StandardScaler", 
-                 response_scaler_kwargs=dict(), lags=None, window_sizes=None, 
-                 window_functions=None, hyperparams=dict(), hyperparams_fixed=dict(), 
-                 n_jobs=-1):
+                 categorical_features=dict(), calendar_anomaly=list(), detrend=True, 
+                 target_scaler="StandardScaler", target_scaler_kwargs=dict(), 
+                 lags=None, window_sizes=None, window_functions=None, hyperparams=dict(), 
+                 hyperparams_fixed=dict(), n_jobs=-1):
         self.model_class = model_class
         self.features = features
         self.categorical_features = categorical_features
-        self.categorical_encoding = categorical_encoding
         self.calendar_anomaly = calendar_anomaly
         self.detrend = detrend
-        self.response_scaler = response_scaler
-        self.response_scaler_kwargs = response_scaler_kwargs
+        self.target_scaler = target_scaler
+        self.target_scaler_kwargs = target_scaler_kwargs
         self.lags = lags
         self.window_sizes = window_sizes
         self.window_functions = window_functions
@@ -102,11 +99,10 @@ class GridSearch(object):
         # parallel fit & evaluation of model on hyperparams
         model_config = {"features":self.features,
                         "categorical_features":self.categorical_features,
-                        "categorical_encoding":self.categorical_encoding,
                         "calendar_anomaly":self.calendar_anomaly,
                         "detrend":self.detrend,
-                        "response_scaler":self.response_scaler,
-                        "response_scaler_kwargs":self.response_scaler_kwargs,
+                        "target_scaler":self.target_scaler,
+                        "target_scaler_kwargs":self.target_scaler_kwargs,
                         "lags":self.lags,
                         "window_sizes":self.window_sizes,
                         "window_functions":self.window_functions}
