@@ -58,21 +58,20 @@ class ForecasterBase(object):
                  ts_uid_columns=list(), detrend=True, target_scaler="StandardScaler",
                  target_scaler_kwargs=dict(), lags=None, window_sizes=None, window_functions=None):
 
-        if lags is not None and "lag" not in features:
-            features.append("lag")
-        if (window_sizes is not None and window_functions is not None) and "rw" not in features:
-            features.append("rw")
-
         self.model = None
         self.model_params = model_params
-        self.features = features
+        self.features = features.copy()
+        if lags is not None and "lag" not in features:
+            self.features.append("lag")
+        if (window_sizes is not None and window_functions is not None) and "rw" not in features:
+            self.features.append("rw")    
         self.exclude_features = ["ds", "y", "y_raw", "weight", "fold_column",
                                  "zero_response", "calendar_anomaly"] + exclude_features
-        self.categorical_features = categorical_features
+        self.categorical_features = categorical_features.copy()
         self.calendar_anomaly = calendar_anomaly
         self.ts_uid_columns = ts_uid_columns
-        for ts_uid_column in ts_uid_columns:
-            if ts_uid_column in self.categorical_features: continue
+        for ts_uid_column in ts_uid_columns:  
+            if ts_uid_column in categorical_features: continue
             self.categorical_features[ts_uid_column] = "default"
         self.detrend = detrend
         self.target_scaler = target_scaler
@@ -234,7 +233,7 @@ class ForecasterBase(object):
         Parameters
         ----------
         predict_data: pandas.DataFrame
-            Dataframe with the same columns as self.train_data (except for 'y') 
+            Dataframe with the same columns as train_data (except for 'y') 
             containing the prediction period.
         Returns
         ----------
@@ -327,6 +326,7 @@ class ForecasterBase(object):
         valid_period: pandas.DataFrame
             Dataframe (with column 'ds') indicating the validation period.
         """
+        self.train_data = train_data
         train_data = train_data.copy()
         if len(self.ts_uid_columns) == 0:
             train_features,valid_features,trend_estimator,scaler =  self._prepare_features(train_data, valid_period)
@@ -365,7 +365,6 @@ class ForecasterBase(object):
         self.raw_features = train_features.columns
         self.input_features = [feature for feature in train_features.columns
                                if feature not in self.exclude_features]
-        self.train_data = train_data
         self.train_features = train_features
         self.valid_period = valid_period
         self.valid_features = valid_features if valid_period is not None else None
@@ -431,10 +430,7 @@ class ForecasterBase(object):
                 predict_data_chunk = predict_data.query(query_string)
                 predict_features = self._prepare_predict_features(predict_data_chunk)
                 if "lag" in self.features or "rw" in self.features:
-                    y_train = self.train_features.query(query_string).y.values
-                    y_valid = self.valid_features.query(query_string).y.values \
-                              if self.valid_period is not None else np.array([])
-                    y_past = np.concatenate([y_train, y_valid])
+                    y_past = self.train_data.query(query_string).y.values
                     prediction = self._predict(self.model, predict_features, y_past)
                 else:
                     prediction = self.model.predict(predict_features)

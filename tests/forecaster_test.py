@@ -37,7 +37,7 @@ class TestForecaster(unittest.TestCase):
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "features":['calendar', 'calendar_cyclical']}
-        if "data_many_ts" in self.data_path:
+        if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=data)
@@ -48,7 +48,7 @@ class TestForecaster(unittest.TestCase):
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "features":['calendar', 'calendar_cyclical']}
-        if "data_many_ts" in self.data_path:
+        if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=data, valid_period=valid_period)
@@ -60,7 +60,7 @@ class TestForecaster(unittest.TestCase):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "features":['calendar', 'calendar_cyclical', 'lag'],
                         "lags":[1,2,3,4,5,6,7]}
-        if "data_many_ts" in self.data_path:
+        if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=data, valid_period=valid_period)
@@ -73,7 +73,7 @@ class TestForecaster(unittest.TestCase):
                         "features":['calendar', 'calendar_cyclical', 'rw'],
                         "window_functions":['mean','median','min','max','sum'],
                         "window_sizes":[7,14,21,28]}
-        if "data_many_ts" in self.data_path:
+        if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=data, valid_period=valid_period)
@@ -81,13 +81,14 @@ class TestForecaster(unittest.TestCase):
     def test_it_fit_predict(self):
         data = pd.read_csv(self.data_path, parse_dates=['ds'])
         predict_data = make_time_range('2019-07-01', '2019-07-31', freq='D')
-        if "data_many_ts" in self.data_path:
-            predict_data = pd.concat([predict_data.assign(ts_uid=1),
-                                      predict_data.assign(ts_uid=2)])
+        if "ts_uid" in data.columns:
+            predict_data = (pd.concat([predict_data.assign(ts_uid=1),
+                                       predict_data.assign(ts_uid=2)])
+                            .reset_index(drop=True))
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "features":['calendar', 'calendar_cyclical']}
-        if "data_many_ts" in self.data_path:
+        if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=data)
@@ -96,14 +97,15 @@ class TestForecaster(unittest.TestCase):
     def test_it_fit_predict_with_lag_features(self):
         data = pd.read_csv(self.data_path, parse_dates=['ds'])
         predict_data = make_time_range('2019-07-01', '2019-07-31', freq='D')
-        if "data_many_ts" in self.data_path:
-            predict_data = pd.concat([predict_data.assign(ts_uid=1),
-                                      predict_data.assign(ts_uid=2)])
+        if "ts_uid" in data.columns:
+            predict_data = (pd.concat([predict_data.assign(ts_uid=1),
+                                       predict_data.assign(ts_uid=2)])
+                            .reset_index(drop=True))
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "features":['calendar', 'calendar_cyclical', 'lag'],
                         "lags":[1,2,3,4,5,6,7]}
-        if "data_many_ts" in self.data_path:
+        if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=data)
@@ -112,15 +114,16 @@ class TestForecaster(unittest.TestCase):
     def test_it_fit_predict_with_rw_features(self):
         data = pd.read_csv(self.data_path, parse_dates=['ds'])
         predict_data = make_time_range('2019-07-01', '2019-07-31', freq='D')
-        if "data_many_ts" in self.data_path:
-            predict_data = pd.concat([predict_data.assign(ts_uid=1),
-                                      predict_data.assign(ts_uid=2)])
+        if "ts_uid" in data.columns:
+            predict_data = (pd.concat([predict_data.assign(ts_uid=1),
+                                       predict_data.assign(ts_uid=2)])
+                            .reset_index(drop=True))
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "features":['calendar', 'calendar_cyclical', 'rw'],
                         "window_functions":['mean','median','min','max','sum'],
                         "window_sizes":[7,14,21,28]}
-        if "data_many_ts" in self.data_path:
+        if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=data)
@@ -133,7 +136,7 @@ class TestForecaster(unittest.TestCase):
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "features":['calendar', 'calendar_cyclical']}
-        if "data_many_ts" in self.data_path:
+        if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=train_data)
@@ -149,7 +152,7 @@ class TestForecaster(unittest.TestCase):
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "features":['calendar', 'calendar_cyclical']}
-        if "data_many_ts" in self.data_path:
+        if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=train_data)
