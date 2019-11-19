@@ -53,18 +53,18 @@ class ForecasterBase(object):
     window_functions: list
         List of string names of the window functions.
     """
-    def __init__(self, model_params=dict(), features=["calendar", "calendar_cyclical"], 
+    def __init__(self, model_params=dict(), feature_sets=["calendar", "calendar_cyclical"], 
                  exclude_features=list(), categorical_features=dict(), calendar_anomaly=list(), 
                  ts_uid_columns=list(), detrend=True, target_scaler="StandardScaler",
                  target_scaler_kwargs=dict(), lags=None, window_sizes=None, window_functions=None):
 
         self.model = None
         self.model_params = model_params
-        self.features = features.copy()
-        if lags is not None and "lag" not in features:
-            self.features.append("lag")
-        if (window_sizes is not None and window_functions is not None) and "rw" not in features:
-            self.features.append("rw")    
+        self.feature_sets = feature_sets.copy()
+        if lags is not None and "lag" not in feature_sets:
+            self.feature_sets.append("lag")
+        if (window_sizes is not None and window_functions is not None) and "rw" not in feature_sets:
+            self.feature_sets.append("rw")    
         self.exclude_features = ["ds", "y", "y_raw", "weight", "fold_column",
                                  "zero_response", "calendar_anomaly"] + exclude_features
         self.categorical_features = categorical_features.copy()
@@ -88,11 +88,11 @@ class ForecasterBase(object):
         if not isinstance(self.model_params, dict):
             raise TypeError("Parameter 'model_params' should be of type 'dict'.")
 
-        if not isinstance(self.features, list):
-            raise TypeError("Parameter 'features' should be of type 'list'.")
+        if not isinstance(self.feature_sets, list):
+            raise TypeError("Parameter 'feature_sets' should be of type 'list'.")
         else:
-            if any([x not in ["calendar", "calendar_cyclical", "lag", "rw"] for x in self.features]):
-                raise ValueError("Values in 'features' should be any of: ['calendar', 'calendar_cyclical', 'lag', 'rw'].")
+            if any([x not in ["calendar", "calendar_cyclical", "lag", "rw"] for x in self.feature_sets]):
+                raise ValueError("Values in 'feature_sets' should be any of: ['calendar', 'calendar_cyclical', 'lag', 'rw'].")
         
         if not isinstance(self.categorical_features, dict):
             raise TypeError("Parameter 'categorical_features' should be of type 'dict'.")
@@ -198,7 +198,7 @@ class ForecasterBase(object):
             Dataframe with at least columns 'ds' and 'y'.
         """
         train_features = compute_train_features(data=train_data,
-                                                include_features=self.features,
+                                                include_features=self.feature_sets,
                                                 lags=self.lags,
                                                 window_sizes=self.window_sizes,
                                                 window_functions=self.window_functions,
@@ -242,7 +242,7 @@ class ForecasterBase(object):
             the trained model.
         """
         predict_features = compute_predict_features(data=predict_data,
-                                                    include_features=self.features,
+                                                    include_features=self.feature_sets,
                                                     lags=self.lags,
                                                     window_sizes=self.window_sizes,
                                                     window_functions=self.window_functions,
@@ -405,7 +405,7 @@ class ForecasterBase(object):
 
         if len(self.ts_uid_columns) == 0:
             predict_features = self._prepare_predict_features(predict_data)
-            if "lag" in self.features or "rw" in self.features:
+            if "lag" in self.feature_sets or "rw" in self.feature_sets:
                 y_train = self.train_features.y.values
                 y_valid = self.valid_features.y.values \
                           if self.valid_period is not None else np.array([])
@@ -429,7 +429,7 @@ class ForecasterBase(object):
                 query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
                 predict_data_chunk = predict_data.query(query_string)
                 predict_features = self._prepare_predict_features(predict_data_chunk)
-                if "lag" in self.features or "rw" in self.features:
+                if "lag" in self.feature_sets or "rw" in self.feature_sets:
                     y_past = self.train_data.query(query_string).y.values
                     prediction = self._predict(self.model, predict_features, y_past)
                 else:
@@ -465,10 +465,10 @@ class ForecasterBase(object):
         """
         y = y_past.tolist()
         for idx in predict_features.index:
-            if "lag" in self.features:
+            if "lag" in self.feature_sets:
                 for lag in self.lags:
                     predict_features.loc[idx, f"lag_{lag}"] = y[-lag]
-            if "rw" in self.features:
+            if "rw" in self.feature_sets:
                 for window_func in self.window_functions:
                     for window in self.window_sizes:
                         predict_features.loc[idx, f"{window_func}_{window}"] = getattr(np, window_func)(y[-window:])
