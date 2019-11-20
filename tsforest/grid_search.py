@@ -22,8 +22,8 @@ class GridSearch(object):
     """
     model_class: Class
         Class of the model to be instantiated.
-    features: list
-        List of features to be included.
+    feature_sets: list
+        List of feature sets to be included.
     categorical_features: dict
         Dict with the name of the categorical feature as keys, and the name
         of the class in 'category_encoders' to be used for encoding as values.
@@ -49,13 +49,13 @@ class GridSearch(object):
         Number of parallel jobs to run on grid search.
     """
 
-    def __init__(self, model_class, features=["calendar", "calendar_cyclical"], 
+    def __init__(self, model_class, feature_sets=["calendar", "calendar_cyclical"], 
                  categorical_features=dict(), calendar_anomaly=list(), detrend=True, 
                  target_scaler="StandardScaler", target_scaler_kwargs=dict(), 
                  lags=None, window_sizes=None, window_functions=None, hyperparams=dict(), 
                  hyperparams_fixed=dict(), n_jobs=-1):
         self.model_class = model_class
-        self.features = features
+        self.feature_sets = feature_sets
         self.categorical_features = categorical_features
         self.calendar_anomaly = calendar_anomaly
         self.detrend = detrend
@@ -97,7 +97,7 @@ class GridSearch(object):
             eval_data = pd.merge(train_data, valid_period, how="inner", on=["ds"])
 
         # parallel fit & evaluation of model on hyperparams
-        model_config = {"features":self.features,
+        model_config = {"feature_sets":self.feature_sets,
                         "categorical_features":self.categorical_features,
                         "calendar_anomaly":self.calendar_anomaly,
                         "detrend":self.detrend,

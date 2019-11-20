@@ -29,8 +29,8 @@ class ForecasterBase(object):
     ----------
     model_params : dict
         Dictionary containing the parameters of the specific boosting model.
-    features: list
-        List of features to be included.
+    feature_sets: list
+        List of feature sets to be included.
     exclude_features: list
         List of features to be excluded from training dataframe.
     categorical_features: dict
@@ -160,13 +160,13 @@ class ForecasterBase(object):
     def _validate_predict_inputs(self, predict_data):
         if not isinstance(predict_data, pd.DataFrame):
             raise TypeError("Parameter 'predict_data' should be of type pandas.DataFrame.")
-        elif not (set(self.train_data.columns) - set(predict_data.columns) == {'y'}):
+        elif not (set(self.train_data.columns) - set(predict_data.columns) == {"y", "y_raw"}):
             raise ValueError("'predict_data' shoud have the same columns as 'train_data' except for 'y'.")
     
     def _validate_evaluate_inputs(self, eval_data, metric):
         if not isinstance(eval_data, pd.DataFrame):
             raise TypeError("'eval_data' should be of type pandas.DataFrame.")
-        elif not (set(self.train_data.columns) == set(eval_data.columns)):
+        elif not (set(eval_data.columns) <= set(self.train_data.columns)):
             raise ValueError("'eval_data' should have the same columns as 'train_data'.")
 
         if not isinstance(metric, str):
@@ -302,11 +302,12 @@ class ForecasterBase(object):
         valid_period: pandas.DataFrame
             Dataframe (with column 'ds') indicating the validation period.
         """
+        train_data = train_data.copy(deep=True)
         time_cut = valid_period.ds.min() if valid_period is not None else None
-        y_target,trend_estimator,scaler = self._prepare_target(train_data,
-                                                               time_cut=time_cut)
-        train_data["y_raw"] = train_data.loc[:, "y"].copy()
-        train_data.loc[:, "y"] = y_target
+        y_target,trend_estimator,scaler = self._prepare_target(train_data, time_cut=time_cut)
+        y_raw = train_data.pop("y").values
+        train_data["y"] = y_target
+        train_data["y_raw"] = y_raw
         train_features = self._prepare_train_features(train_data)
         if valid_period is not None:
             valid_features = self._prepare_valid_features(valid_period, train_features)
@@ -326,8 +327,6 @@ class ForecasterBase(object):
         valid_period: pandas.DataFrame
             Dataframe (with column 'ds') indicating the validation period.
         """
-        self.train_data = train_data
-        train_data = train_data.copy()
         if len(self.ts_uid_columns) == 0:
             train_features,valid_features,trend_estimator,scaler =  self._prepare_features(train_data, valid_period)
             self.trend_estimator = trend_estimator
@@ -354,8 +353,17 @@ class ForecasterBase(object):
             self.trend_estimators = trend_estimators
             self.scalers = scalers
         
+        self.train_data = (pd.concat([train_features,valid_features])
+                           .loc[:, list(train_data.columns) + ["y_raw"]])
+        
+        # performs the encoding of categorical features
         if len(self.categorical_features) > 0:
             train_features,categorical_encoders = self._encode_categorical_features(train_features, self.categorical_features, self.ts_uid_columns)
+            if valid_period is not None:
+                for feature,encoder in categorical_encoders.items():
+                    transformed = encoder.transform(valid_features.loc[:, [feature]])
+                    del valid_features[feature]
+                    valid_features[transformed.columns] = transformed 
             self.categorical_encoders = categorical_encoders
         # categorical features encoded by the tree/boosting model
         _categorical_features = [feature for feature,encoder in self.categorical_features.items() 
@@ -406,10 +414,7 @@ class ForecasterBase(object):
         if len(self.ts_uid_columns) == 0:
             predict_features = self._prepare_predict_features(predict_data)
             if "lag" in self.feature_sets or "rw" in self.feature_sets:
-                y_train = self.train_features.y.values
-                y_valid = self.valid_features.y.values \
-                          if self.valid_period is not None else np.array([])
-                y_past = np.concatenate([y_train, y_valid])
+                y_past = self.train_data.y.values
                 prediction = self._predict(self.model, predict_features, y_past)
             else:
                 prediction = self.model.predict(predict_features)
@@ -421,9 +426,11 @@ class ForecasterBase(object):
             if "zero_response" in predict_features.columns:
                 zero_response_mask = predict_features["zero_response"]==1
                 prediction[zero_response_mask] = 0
+            self.predict_features = predict_features
             prediction_dataframe = pd.DataFrame({"ds":predict_data.ds, "y_pred":prediction})
         else:
             ts_uid_values = predict_data.loc[:, self.ts_uid_columns].drop_duplicates()
+            all_predict_features = list()
             all_prediction_dataframes = list()
             for _,row in ts_uid_values.iterrows():
                 query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
@@ -447,7 +454,9 @@ class ForecasterBase(object):
                 
                 _prediction_dataframe = pd.DataFrame({**{"ds":predict_data_chunk.ds, "y_pred":prediction}, 
                                                       **dict(row.iteritems())})
+                all_predict_features.append(predict_features)
                 all_prediction_dataframes.append(_prediction_dataframe)
+            self.predict_features = pd.concat(all_predict_features).reset_index(drop=True)
             prediction_dataframe = pd.concat(all_prediction_dataframes).reset_index(drop=True)
 
         return prediction_dataframe 

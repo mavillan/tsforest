@@ -20,7 +20,7 @@ class TestGridSearch(unittest.TestCase):
         hyperparams_fixed = {'num_iterations':30, 'learning_rate':0.3}
   
         gs = GridSearch(model_class=LightGBMForecaster,
-                features=['calendar', 'calendar_cyclical'], 
+                feature_sets=['calendar', 'calendar_cyclical'], 
                 hyperparams=hyperparams,
                 hyperparams_fixed=hyperparams_fixed,
                 n_jobs=-1)
@@ -34,7 +34,7 @@ class TestGridSearch(unittest.TestCase):
         hyperparams_fixed = {'num_iterations':30, 'learning_rate':0.3}
         
         gs = GridSearch(model_class=LightGBMForecaster,
-                features=['calendar', 'calendar_cyclical'], 
+                feature_sets=['calendar', 'calendar_cyclical'], 
                 hyperparams=hyperparams,
                 hyperparams_fixed=hyperparams_fixed,
                 n_jobs=-1)
@@ -48,7 +48,7 @@ class TestGridSearch(unittest.TestCase):
         hyperparams_fixed = {'ntrees':30, 'learn_rate':0.3}
 
         gs = GridSearch(model_class=H2OGBMForecaster,
-                features=['calendar', 'calendar_cyclical'], 
+                feature_sets=['calendar', 'calendar_cyclical'], 
                 hyperparams=hyperparams,
                 hyperparams_fixed=hyperparams_fixed,
                 n_jobs=-1)
@@ -62,7 +62,7 @@ class TestGridSearch(unittest.TestCase):
         hyperparams_fixed = {'ntrees':30, 'learn_rate':0.3}
 
         gs = GridSearch(model_class=H2OGBMForecaster,
-                features=['calendar', 'calendar_cyclical'], 
+                feature_sets=['calendar', 'calendar_cyclical'], 
                 hyperparams=hyperparams,
                 hyperparams_fixed=hyperparams_fixed,
                 n_jobs=-1)
@@ -76,7 +76,7 @@ class TestGridSearch(unittest.TestCase):
         hyperparams_fixed = {'iterations':30, 'learning_rate':0.3}
   
         gs = GridSearch(model_class=CatBoostForecaster,
-                features=['calendar', 'calendar_cyclical'], 
+                feature_sets=['calendar', 'calendar_cyclical'], 
                 hyperparams=hyperparams,
                 hyperparams_fixed=hyperparams_fixed,
                 n_jobs=-1)
@@ -90,7 +90,7 @@ class TestGridSearch(unittest.TestCase):
         hyperparams_fixed = {'iterations':30, 'learning_rate':0.3}
         
         gs = GridSearch(model_class=CatBoostForecaster,
-                features=['calendar', 'calendar_cyclical'], 
+                feature_sets=['calendar', 'calendar_cyclical'], 
                 hyperparams=hyperparams,
                 hyperparams_fixed=hyperparams_fixed,
                 n_jobs=-1)

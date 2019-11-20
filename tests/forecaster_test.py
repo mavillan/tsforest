@@ -36,7 +36,7 @@ class TestForecaster(unittest.TestCase):
         data = pd.read_csv(self.data_path, parse_dates=['ds'])
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
-                        "features":['calendar', 'calendar_cyclical']}
+                        "feature_sets":['calendar', 'calendar_cyclical']}
         if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
@@ -47,7 +47,7 @@ class TestForecaster(unittest.TestCase):
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
-                        "features":['calendar', 'calendar_cyclical']}
+                        "feature_sets":['calendar', 'calendar_cyclical']}
         if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
@@ -58,7 +58,7 @@ class TestForecaster(unittest.TestCase):
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
-                        "features":['calendar', 'calendar_cyclical', 'lag'],
+                        "feature_sets":['calendar', 'calendar_cyclical', 'lag'],
                         "lags":[1,2,3,4,5,6,7]}
         if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
@@ -70,7 +70,7 @@ class TestForecaster(unittest.TestCase):
         valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
-                        "features":['calendar', 'calendar_cyclical', 'rw'],
+                        "feature_sets":['calendar', 'calendar_cyclical', 'rw'],
                         "window_functions":['mean','median','min','max','sum'],
                         "window_sizes":[7,14,21,28]}
         if "ts_uid" in data.columns:
@@ -87,7 +87,7 @@ class TestForecaster(unittest.TestCase):
                             .reset_index(drop=True))
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
-                        "features":['calendar', 'calendar_cyclical']}
+                        "feature_sets":['calendar', 'calendar_cyclical']}
         if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
@@ -103,7 +103,7 @@ class TestForecaster(unittest.TestCase):
                             .reset_index(drop=True))
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
-                        "features":['calendar', 'calendar_cyclical', 'lag'],
+                        "feature_sets":['calendar', 'calendar_cyclical', 'lag'],
                         "lags":[1,2,3,4,5,6,7]}
         if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
@@ -120,7 +120,7 @@ class TestForecaster(unittest.TestCase):
                             .reset_index(drop=True))
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
-                        "features":['calendar', 'calendar_cyclical', 'rw'],
+                        "feature_sets":['calendar', 'calendar_cyclical', 'rw'],
                         "window_functions":['mean','median','min','max','sum'],
                         "window_sizes":[7,14,21,28]}
         if "ts_uid" in data.columns:
@@ -135,7 +135,7 @@ class TestForecaster(unittest.TestCase):
         eval_data = data.query('ds >= "2019-06-01"')
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
-                        "features":['calendar', 'calendar_cyclical']}
+                        "feature_sets":['calendar', 'calendar_cyclical']}
         if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
@@ -151,7 +151,7 @@ class TestForecaster(unittest.TestCase):
         eval_data = data.query('ds >= "2019-06-01"')
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
-                        "features":['calendar', 'calendar_cyclical']}
+                        "feature_sets":['calendar', 'calendar_cyclical']}
         if "ts_uid" in data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
         fcaster = self.model_class(**model_kwargs)
