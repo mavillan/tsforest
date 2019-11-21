@@ -442,7 +442,9 @@ class ForecasterBase(object):
                 zero_response_mask = predict_features["zero_response"]==1
                 prediction[zero_response_mask] = 0
             self.predict_features = predict_features
-            prediction_dataframe = pd.DataFrame({"ds":predict_data.ds, "y_pred":prediction})
+            prediction_dataframe = (predict_data
+                                    .loc[:, ["ds"]+self.ts_uid_columns]
+                                    .assign(y_pred = prediction))
         else:
             ts_uid_values = predict_data.loc[:, self.ts_uid_columns].drop_duplicates()
             all_predict_features = list()
@@ -467,8 +469,9 @@ class ForecasterBase(object):
                     zero_response_mask = predict_features["zero_response"]==1
                     prediction[zero_response_mask] = 0
                 
-                _prediction_dataframe = pd.DataFrame({**{"ds":predict_data_chunk.ds, "y_pred":prediction}, 
-                                                      **dict(row.iteritems())})
+                _prediction_dataframe = (predict_data_chunk
+                                         .loc[:, ["ds"]+self.ts_uid_columns]
+                                         .assign(y_pred = prediction))
                 all_predict_features.append(predict_features)
                 all_prediction_dataframes.append(_prediction_dataframe)
             self.predict_features = pd.concat(all_predict_features).reset_index(drop=True)
