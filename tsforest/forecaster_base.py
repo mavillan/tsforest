@@ -329,7 +329,8 @@ class ForecasterBase(object):
             Dataframe (with column 'ds') indicating the validation period.
         """
         self._validate_input_data(train_data, valid_period)
-        if len(self.ts_uid_columns) == 0:
+        if (len(self.ts_uid_columns) == 0 or 
+            (not self.detrend and self.target_scaler is None)):
             train_features,valid_features,trend_estimator,scaler =  self._prepare_features(train_data, valid_period)
             self.trend_estimator = trend_estimator
             self.scaler = scaler
