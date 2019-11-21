@@ -79,6 +79,7 @@ class ForecasterBase(object):
         self.lags = lags
         self.window_sizes = window_sizes
         self.window_functions = window_functions
+        self._features_already_prepared = False
         self._validate_inputs()
     
     def _validate_inputs(self):
@@ -145,7 +146,7 @@ class ForecasterBase(object):
                 elif any([x not in AVAILABLE_RW_FUNCTIONS for x in self.window_functions]):
                     raise ValueError(f"Values in 'window_functions' should be any of: {AVAILABLE_RW_FUNCTIONS}.")
     
-    def _validate_fit_inputs(self, train_data, valid_period):
+    def _validate_input_data(self, train_data, valid_period):
         if not isinstance(train_data, pd.DataFrame):
             raise TypeError("Parameter 'train_data' should be of type pandas.DataFrame.")
         elif not ({"ds", "y"} <= set(train_data.columns.values)):
@@ -157,13 +158,13 @@ class ForecasterBase(object):
             elif {"ds"} != set(valid_period.columns.values):
                 raise ValueError("'valid_period' should contain only the column 'ds'.")
     
-    def _validate_predict_inputs(self, predict_data):
+    def _validate_predict_data(self, predict_data):
         if not isinstance(predict_data, pd.DataFrame):
             raise TypeError("Parameter 'predict_data' should be of type pandas.DataFrame.")
         elif not (set(self.train_data.columns) - set(predict_data.columns) == {"y", "y_raw"}):
             raise ValueError("'predict_data' shoud have the same columns as 'train_data' except for 'y'.")
     
-    def _validate_evaluate_inputs(self, eval_data, metric):
+    def _validate_evaluate_data(self, eval_data, metric):
         if not isinstance(eval_data, pd.DataFrame):
             raise TypeError("'eval_data' should be of type pandas.DataFrame.")
         elif not (set(eval_data.columns) <= set(self.train_data.columns)):
@@ -327,6 +328,7 @@ class ForecasterBase(object):
         valid_period: pandas.DataFrame
             Dataframe (with column 'ds') indicating the validation period.
         """
+        self._validate_input_data(train_data, valid_period)
         if len(self.ts_uid_columns) == 0:
             train_features,valid_features,trend_estimator,scaler =  self._prepare_features(train_data, valid_period)
             self.trend_estimator = trend_estimator
@@ -365,7 +367,7 @@ class ForecasterBase(object):
                     del valid_features[feature]
                     valid_features[transformed.columns] = transformed 
             self.categorical_encoders = categorical_encoders
-        # categorical features encoded by the tree/boosting model
+        # categorical features to be encoded by the tree/boosting model
         _categorical_features = [feature for feature,encoder in self.categorical_features.items() 
                                  if encoder == "default"]
         self._categorical_features = _categorical_features
@@ -376,9 +378,10 @@ class ForecasterBase(object):
         self.train_features = train_features
         self.valid_period = valid_period
         self.valid_features = valid_features if valid_period is not None else None
+        self._features_already_prepared = True
         return self.train_features, self.valid_features
 
-    def fit(self, train_data, valid_period=None):
+    def fit(self, train_data=None, valid_period=None):
         """
         Parameters
         ----------
@@ -387,8 +390,12 @@ class ForecasterBase(object):
         valid_period: pandas.DataFrame
             Dataframe (with column 'ds') indicating the validation period.
         """
-        self._validate_fit_inputs(train_data, valid_period)
-        train_features,valid_features = self.prepare_features(train_data, valid_period)
+        if not self._features_already_prepared:
+            self._validate_input_data(train_data, valid_period)
+            train_features,valid_features = self.prepare_features(train_data, valid_period)
+        else:
+            train_features = self.train_features
+            valid_features = self.valid_features
         kwargs = {"train_features":train_features, 
                   "valid_features":valid_features,
                   "input_features":self.input_features,
@@ -409,7 +416,7 @@ class ForecasterBase(object):
         prediction_dataframe: pandas.DataFrame
             Dataframe containing the dates 'ds' and predictions 'y_pred'.
         """
-        self._validate_predict_inputs(predict_data) 
+        self._validate_predict_data(predict_data) 
 
         if len(self.ts_uid_columns) == 0:
             predict_features = self._prepare_predict_features(predict_data)
@@ -498,7 +505,7 @@ class ForecasterBase(object):
         error: float
             error of predictions according to the error measure
         """
-        self._validate_evaluate_inputs(eval_data, metric)
+        self._validate_evaluate_data(eval_data, metric)
         eval_data = eval_data.copy()
         y_real = eval_data.pop("y")
         y_pred = self.predict(eval_data)["y_pred"].values
