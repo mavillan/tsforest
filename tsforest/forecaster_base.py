@@ -178,7 +178,10 @@ class ForecasterBase(object):
     def _encode_categorical_features(self, train_features, categorical_features, ts_uid_columns):
         categorical_encoders = dict()
         for feature,encoding in categorical_features.items():
-            if encoding == "default": continue
+            if encoding == "default": 
+                if not np.issubdtype(train_features[feature].dtype, np.number):
+                    encoding = "OrdinalEncoder"
+                else: continue
             encoder_class = getattr(ce, encoding)
             encoder = encoder_class(cols=[feature])
             if feature in ts_uid_columns:
