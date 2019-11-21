@@ -330,7 +330,9 @@ class ForecasterBase(object):
         """
         self._validate_input_data(train_data, valid_period)
         if (len(self.ts_uid_columns) == 0 or 
-            (not self.detrend and self.target_scaler is None)):
+            (not self.detrend and 
+             self.target_scaler is None and
+             {"lag", "rw"}.intersection(self.feature_sets) == set())):
             train_features,valid_features,trend_estimator,scaler =  self._prepare_features(train_data, valid_period)
             self.trend_estimator = trend_estimator
             self.scaler = scaler
@@ -392,7 +394,6 @@ class ForecasterBase(object):
             Dataframe (with column 'ds') indicating the validation period.
         """
         if not self._features_already_prepared:
-            self._validate_input_data(train_data, valid_period)
             train_features,valid_features = self.prepare_features(train_data, valid_period)
         else:
             train_features = self.train_features
@@ -419,7 +420,10 @@ class ForecasterBase(object):
         """
         self._validate_predict_data(predict_data) 
 
-        if len(self.ts_uid_columns) == 0:
+        if (len(self.ts_uid_columns) == 0 or 
+            (not self.detrend and 
+             self.target_scaler is None and
+             {"lag", "rw"}.intersection(self.feature_sets) == set())):
             predict_features = self._prepare_predict_features(predict_data)
             if "lag" in self.feature_sets or "rw" in self.feature_sets:
                 y_past = self.train_data.y.values
