@@ -31,6 +31,8 @@ class GridSearch(object):
         of the class in 'category_encoders' to be used for encoding as values.
     calendar_anomaly: list
         List of names of calendar features affected by an anomaly.
+    ts_uid_columns: list
+        List of columns names that are unique identifiers for time series.
     detrend: bool
         Whether or not to remove the trend from time serie.
     target_scaler: str
@@ -53,14 +55,15 @@ class GridSearch(object):
 
     def __init__(self, model_class, feature_sets=["calendar", "calendar_cyclical"], 
                  exclude_features=list(), categorical_features=dict(), calendar_anomaly=list(), 
-                 detrend=True, target_scaler="StandardScaler", target_scaler_kwargs=dict(), 
-                 lags=None, window_sizes=None, window_functions=None, hyperparams=dict(), 
-                 hyperparams_fixed=dict(), n_jobs=-1):
+                 ts_uid_columns=list(), detrend=True, target_scaler="StandardScaler", 
+                 target_scaler_kwargs=dict(), lags=None, window_sizes=None, window_functions=None, 
+                 hyperparams=dict(), hyperparams_fixed=dict(), n_jobs=-1):
         self.model_class = model_class
         self.feature_sets = feature_sets
         self.exclude_features = exclude_features
         self.categorical_features = categorical_features
         self.calendar_anomaly = calendar_anomaly
+        self.ts_uid_columns = ts_uid_columns
         self.detrend = detrend
         self.target_scaler = target_scaler
         self.target_scaler_kwargs = target_scaler_kwargs
@@ -104,6 +107,7 @@ class GridSearch(object):
                         "exclude_features":self.exclude_features,
                         "categorical_features":self.categorical_features,
                         "calendar_anomaly":self.calendar_anomaly,
+                        "ts_uid_columns":self.ts_uid_columns,
                         "detrend":self.detrend,
                         "target_scaler":self.target_scaler,
                         "target_scaler_kwargs":self.target_scaler_kwargs,
