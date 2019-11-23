@@ -11,6 +11,7 @@ from tsforest.forest_base import BaseRegressor
 class H2OGBMRegressor(BaseRegressor):
     def __init__(self, model_params):
         self.model_params = {**gbm_parameters, **model_params}
+        self.model = None
 
     def cast_dataframe(self, features_dataframe, input_features, target,  categorical_features):
         features_types = {feature:"categorical" for feature in categorical_features
@@ -47,17 +48,25 @@ class H2OGBMRegressor(BaseRegressor):
         prediction = _prediction.as_data_frame().values[:,0]
         return prediction
 
+    def save_model(self, fname, **kwargs):
+        if self.model is not None:
+            h2o.save_model(model=self.model, path=fname, **kwargs)
+    
+    def load_model(self, fname, **kwargs):
+        self.model = h2o.load_model(fname, **kwargs)
+
 
 class LightGBMRegressor(BaseRegressor):
     def __init__(self, model_params):
         self.model_params = {**lgbm_parameters, **model_params}
+        self.model = None
 
     def cast_dataframe(self, features_dataframe, input_features, target, categorical_features):
         dataset_params = {"data":features_dataframe.loc[:, input_features],
                           "categorical_feature":categorical_features,
                           "free_raw_data":False}
         if "weight" in features_dataframe.columns:
-            dataset_params["weight"] = features_dataframe.loc[:, weight].values
+            dataset_params["weight"] = features_dataframe.loc[:, "weight"].values
         if target in features_dataframe.columns:
             dataset_params["label"] = features_dataframe.loc[:, target].values
         features_dataframe_casted = lightgbm.Dataset(**dataset_params)
@@ -85,17 +94,25 @@ class LightGBMRegressor(BaseRegressor):
     def predict(self, predict_features):
         prediction = self.model.predict(predict_features.loc[:, self.input_features])
         return prediction
+    
+    def save_model(self, fname, **kwargs):
+        if self.model is not None:
+            self.model.save_model(fname, **kwargs)
+    
+    def load_model(self, fname, **kwargs):
+        self.model = lightgbm.Booster(model_file=fname, **kwargs)
 
 
 class CatBoostRegressor(BaseRegressor):
     def __init__(self, model_params):
         self.model_params = {**cat_parameters, **model_params}
+        self.model = None
 
     def cast_dataframe(self, features_dataframe, input_features, target,  categorical_features):
         dataset_params = {"data":features_dataframe.loc[:, input_features],
                           "cat_features":categorical_features}
         if "weight" in features_dataframe.columns:
-            dataset_params["weight"] = features_dataframe.loc[:, weight].values
+            dataset_params["weight"] = features_dataframe.loc[:, "weight"].values
         if target in features_dataframe.columns:
             dataset_params["label"] = features_dataframe.loc[:, target].values
         features_dataframe_casted = catboost.Pool(**dataset_params)
@@ -125,15 +142,24 @@ class CatBoostRegressor(BaseRegressor):
         prediction = self.model.predict(predict_features_casted)
         return prediction
 
+    def save_model(self, fname, **kwargs):
+        if self.model is not None:
+            self.model.save_model(fname, **kwargs)
+    
+    def load_model(self, fname, **kwargs):
+        self.model = catboost.CatBoostRegressor()
+        self.model.load_model(fname, **kwargs)
+
 
 class XGBoostRegressor(BaseRegressor):
     def __init__(self, model_params):
         self.model_params = {**xgb_parameters, **model_params}
+        self.model = None
 
     def cast_dataframe(self, features_dataframe, input_features, target,  categorical_features):
         dataset_params = {"data":features_dataframe.loc[:, input_features]}
         if "weight" in features_dataframe.columns:
-            dataset_params["weight"] = features_dataframe.loc[:, weight].values
+            dataset_params["weight"] = features_dataframe.loc[:, "weight"].values
         if target in features_dataframe.columns:
             dataset_params["label"] = features_dataframe.loc[:, target].values
         features_dataframe_casted = xgboost.DMatrix(**dataset_params)
@@ -164,3 +190,11 @@ class XGBoostRegressor(BaseRegressor):
         predict_features_casted = self.cast_dataframe(predict_features, self.input_features, self.target, self.categorical_features)
         prediction = self.model.predict(predict_features_casted, ntree_limit=self.best_iteration)
         return prediction
+
+    def save_model(self, fname, **kwargs):
+        if self.model is not None:
+            self.model.save_model(fname, **kwargs)
+    
+    def load_model(self, fname, **kwargs):
+        self.model = xgboost.Booster()
+        self.model.load_model(fname **kwargs)

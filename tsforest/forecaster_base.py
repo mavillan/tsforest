@@ -523,3 +523,10 @@ class ForecasterBase(object):
         error_func = getattr(metrics, f"compute_{metric}")
         error = error_func(y_real, y_pred)
         return error
+
+    def save_model(self, fname, **kwargs):
+        if self.model is not None:
+            self.model.save_model(fname, **kwargs)
+
+    def load_model(self, fname, **kwargs):
+        self.model.load_model(fname, **kwargs)
