@@ -31,132 +31,108 @@ TEST_MODELS = [CatBoostForecaster,
     for data_path in TEST_DATA
 ])
 class TestForecaster(unittest.TestCase):
+    def setUp(self):
+        data = pd.read_csv(self.data_path, parse_dates=['ds'])
+        self.train_data = data.query("ds <= '2019-04-30'")
+        self.valid_index = data.query("'2019-04-01' <= ds <= '2019-04-30'").index
+        self.eval_data = data.query("'2019-05-01' <= ds <= '2019-05-31'")
+        self.predict_data = self.eval_data.drop("y", axis=1)
 
     def test_it_fit(self):
-        data = pd.read_csv(self.data_path, parse_dates=['ds'])
-
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "feature_sets":['calendar', 'calendar_cyclical']}
-        if "ts_uid" in data.columns:
+        if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
+
         fcaster = self.model_class(**model_kwargs)
-        fcaster.fit(train_data=data)
+        fcaster.fit(train_data=self.train_data)
     
-    def test_it_fit_with_valid_period(self):
-        data = pd.read_csv(self.data_path, parse_dates=['ds'])
-        valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
-
+    def test_it_fit_with_valid_index(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "feature_sets":['calendar', 'calendar_cyclical']}
-        if "ts_uid" in data.columns:
+        if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
+
         fcaster = self.model_class(**model_kwargs)
-        fcaster.fit(train_data=data, valid_period=valid_period)
+        fcaster.fit(train_data=self.train_data, valid_index=self.valid_index)
 
     def test_it_fit_with_lag_features(self):
-        data = pd.read_csv(self.data_path, parse_dates=['ds'])
-        valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
-
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "feature_sets":['calendar', 'calendar_cyclical', 'lag'],
                         "lags":[1,2,3,4,5,6,7]}
-        if "ts_uid" in data.columns:
+        if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
+
         fcaster = self.model_class(**model_kwargs)
-        fcaster.fit(train_data=data, valid_period=valid_period)
+        fcaster.fit(train_data=self.train_data, valid_index=self.valid_index)
 
     def test_it_fit_with_rw_features(self):
-        data = pd.read_csv(self.data_path, parse_dates=['ds'])
-        valid_period = make_time_range('2019-06-01', '2019-06-30', freq='D')
-
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "feature_sets":['calendar', 'calendar_cyclical', 'rw'],
                         "window_functions":['mean','median','min','max','sum'],
                         "window_sizes":[7,14,21,28]}
-        if "ts_uid" in data.columns:
+        if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
+
         fcaster = self.model_class(**model_kwargs)
-        fcaster.fit(train_data=data, valid_period=valid_period)
+        fcaster.fit(train_data=self.train_data, valid_index=self.valid_index)
 
     def test_it_fit_predict(self):
-        data = pd.read_csv(self.data_path, parse_dates=['ds'])
-        predict_data = make_time_range('2019-07-01', '2019-07-31', freq='D')
-        if "ts_uid" in data.columns:
-            predict_data = (pd.concat([predict_data.assign(ts_uid=1),
-                                       predict_data.assign(ts_uid=2)])
-                            .reset_index(drop=True))
-
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "feature_sets":['calendar', 'calendar_cyclical']}
-        if "ts_uid" in data.columns:
+        if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
+
         fcaster = self.model_class(**model_kwargs)
-        fcaster.fit(train_data=data)
-        prediction_dataframe = fcaster.predict(predict_data)
+        fcaster.fit(train_data=self.train_data)
+        prediction_dataframe = fcaster.predict(self.predict_data)
 
     def test_it_fit_predict_with_lag_features(self):
-        data = pd.read_csv(self.data_path, parse_dates=['ds'])
-        predict_data = make_time_range('2019-07-01', '2019-07-31', freq='D')
-        if "ts_uid" in data.columns:
-            predict_data = (pd.concat([predict_data.assign(ts_uid=1),
-                                       predict_data.assign(ts_uid=2)])
-                            .reset_index(drop=True))
 
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "feature_sets":['calendar', 'calendar_cyclical', 'lag'],
                         "lags":[1,2,3,4,5,6,7]}
-        if "ts_uid" in data.columns:
+        if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
+
         fcaster = self.model_class(**model_kwargs)
-        fcaster.fit(train_data=data)
-        prediction_dataframe = fcaster.predict(predict_data)
+        fcaster.fit(train_data=self.train_data)
+        _ = fcaster.predict(self.predict_data)
 
     def test_it_fit_predict_with_rw_features(self):
-        data = pd.read_csv(self.data_path, parse_dates=['ds'])
-        predict_data = make_time_range('2019-07-01', '2019-07-31', freq='D')
-        if "ts_uid" in data.columns:
-            predict_data = (pd.concat([predict_data.assign(ts_uid=1),
-                                       predict_data.assign(ts_uid=2)])
-                            .reset_index(drop=True))
-
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "feature_sets":['calendar', 'calendar_cyclical', 'rw'],
                         "window_functions":['mean','median','min','max','sum'],
                         "window_sizes":[7,14,21,28]}
-        if "ts_uid" in data.columns:
+        if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
+
         fcaster = self.model_class(**model_kwargs)
-        fcaster.fit(train_data=data)
-        prediction_dataframe = fcaster.predict(predict_data)
+        fcaster.fit(train_data=self.train_data)
+        _ = fcaster.predict(self.predict_data)
 
     def test_it_fit_evaluate(self):
-        data = pd.read_csv(self.data_path, parse_dates=['ds'])
-        train_data = data.query('ds < "2019-06-01"')
-        eval_data = data.query('ds >= "2019-06-01"')
-
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "feature_sets":['calendar', 'calendar_cyclical']}
-        if "ts_uid" in data.columns:
+        if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
+        
         fcaster = self.model_class(**model_kwargs)
-        fcaster.fit(train_data=train_data)
-        error = fcaster.evaluate(eval_data)
+        fcaster.fit(train_data=self.train_data)
+        error = fcaster.evaluate(self.eval_data)
 
         assert type(error)==np.float64, \
             f'fcaster.evaluate returns {error} which is not of type numpy.float64'
     
     def test_it_fit_evaluate_with_bounded_error(self):
-        data = pd.read_csv(self.data_path, parse_dates=['ds'])
-        train_data = data.query('ds < "2019-06-01"')
-        eval_data = data.query('ds >= "2019-06-01"')
-
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "feature_sets":['calendar', 'calendar_cyclical']}
-        if "ts_uid" in data.columns:
+        if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
+
         fcaster = self.model_class(**model_kwargs)
-        fcaster.fit(train_data=train_data)
-        error = fcaster.evaluate(eval_data)
+        fcaster.fit(train_data=self.train_data)
+        error = fcaster.evaluate(self.eval_data)
 
         assert error <= 2, \
             f"fcaster.evaluate returns error=={error} which is greater than 2."
