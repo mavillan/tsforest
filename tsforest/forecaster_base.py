@@ -146,17 +146,20 @@ class ForecasterBase(object):
                 elif any([x not in AVAILABLE_RW_FUNCTIONS for x in self.window_functions]):
                     raise ValueError(f"Values in 'window_functions' should be any of: {AVAILABLE_RW_FUNCTIONS}.")
     
-    def _validate_input_data(self, train_data, valid_period):
+    def _validate_input_data(self, train_data, valid_index):
         if not isinstance(train_data, pd.DataFrame):
             raise TypeError("Parameter 'train_data' should be of type pandas.DataFrame.")
         elif not ({"ds", "y"} <= set(train_data.columns.values)):
             raise ValueError("'train_data' should contain columns 'ds' and 'y'.")
         
-        if valid_period is not None:
-            if not isinstance(valid_period, pd.DataFrame):
-                raise TypeError("Parameter 'valid_period' should be of type pandas.DataFrame.")
-            elif {"ds"} != set(valid_period.columns.values):
-                raise ValueError("'valid_period' should contain only the column 'ds'.")
+        if valid_index is not None:
+            if (not isinstance(valid_index, list) and
+                not isinstance(valid_index, np.ndarray) and
+                not isinstance(valid_index, pd.Index)):
+                raise TypeError("Parameter 'valid_index' should be of type 'list', 'numpy.ndarray' or 'pandas.Index'.")
+            elif not (set(valid_index) <= set(train_data.index)):
+                raise ValueError("Parameter 'valid_index' should only contain index values present in 'train_data.index'.") 
+
     
     def _validate_predict_data(self, predict_data):
         if not isinstance(predict_data, pd.DataFrame):
@@ -218,20 +221,6 @@ class ForecasterBase(object):
             train_features.loc[idx, self.calendar_anomaly] = np.nan
         return train_features
     
-    def _prepare_valid_features(self, valid_period, train_features):
-        """
-        Parameters
-        ----------
-        valid_period : pandas.DataFrame
-            Dataframe with column 'ds' indicating the validation period.
-        train_features: pandas.DataFrame
-            Dataframe containing the training features.
-        """
-        valid_features = pd.merge(valid_period, train_features, how="inner", on=["ds"])
-        assert len(valid_features) > 0, \
-            "None of the dates in valid_period are in train_features."
-        return valid_features
-
     def _prepare_predict_features(self, predict_data):
         """
         Parameters
@@ -268,7 +257,7 @@ class ForecasterBase(object):
         features_to_keep = [feature for feature in predict_features.columns if feature in self.raw_features]
         return predict_features.loc[:, features_to_keep]
     
-    def _prepare_target(self, data, time_cut):
+    def _prepare_target(self, data):
         """
         Prepares the target variable
 
@@ -276,14 +265,11 @@ class ForecasterBase(object):
         ----------
         data: pd.DataFrame
             Dataframe containing the columns 'ds' and 'y'.
-        time_cut: str or Timestamp
-            Time in which data is cut for training trend estimator and target scaler.
         """
-        data_cut = data.query("ds < @time_cut") if time_cut is not None else data
         y_target = data.y.values.copy().astype(float)
         if self.detrend:
             trend_estimator = TrendEstimator()
-            trend_estimator.fit(data=data_cut.loc[:, ["ds", "y"]])
+            trend_estimator.fit(data=data.loc[:, ["ds", "y"]])
             trend_dataframe = trend_estimator.predict(data.loc[:, ["ds"]])
             y_target -= trend_dataframe.trend.values
         else:
@@ -291,52 +277,43 @@ class ForecasterBase(object):
         if self.target_scaler is not None:
             scaler_class = getattr(preprocessing, self.target_scaler)
             scaler = scaler_class(**self.target_scaler_kwargs)
-            scaler.fit(y_target[0:len(data_cut)].reshape(-1,1))
+            scaler.fit(y_target.reshape(-1,1))
             y_target = scaler.transform(y_target.reshape(-1,1)).ravel()
         else:
             scaler = None
         return y_target,trend_estimator,scaler
 
-    def _prepare_features(self, train_data, valid_period=None):
+    def prepare_train_features(self, train_data):
         """
         Parameters
         ----------
         train_data : pandas.DataFrame
             Dataframe with at least columns 'ds' and 'y'.
-        valid_period: pandas.DataFrame
-            Dataframe (with column 'ds') indicating the validation period.
         """
         train_data = train_data.copy(deep=True)
-        time_cut = valid_period.ds.min() if valid_period is not None else None
-        y_target,trend_estimator,scaler = self._prepare_target(train_data, time_cut=time_cut)
-        y_raw = train_data.pop("y").values
+        y_target,trend_estimator,scaler = self._prepare_target(train_data)
+        train_data["y_raw"] = train_data.pop("y").values
         train_data["y"] = y_target
-        train_data["y_raw"] = y_raw
         train_features = self._prepare_train_features(train_data)
-        if valid_period is not None:
-            valid_features = self._prepare_valid_features(valid_period, train_features)
-            # removes validation period from train_features
-            valid_start_time = valid_features.ds.min()
-            train_features = train_features.query("ds < @valid_start_time")
-        else:
-            valid_features = pd.DataFrame(columns=train_features.columns)
-        return train_features,valid_features,trend_estimator,scaler
+        train_features.set_index(train_data.index, inplace=True)
+        return train_features,trend_estimator,scaler
     
-    def prepare_features(self, train_data, valid_period=None):
+    def prepare_features(self, train_data, valid_index=None):
         """
         Parameters
         ----------
         train_data : pandas.DataFrame
             Dataframe with at least columns 'ds' and 'y'.
-        valid_period: pandas.DataFrame
-            Dataframe (with column 'ds') indicating the validation period.
+        valid_index: list | numpy.ndarray | pandas.Index
+            Array with indexes from train_data to be used for validation.
         """
-        self._validate_input_data(train_data, valid_period)
+        self._validate_input_data(train_data, valid_index)
+
         if (len(self.ts_uid_columns) == 0 or 
             (not self.detrend and 
              self.target_scaler is None and
              {"lag", "rw"}.intersection(self.feature_sets) == set())):
-            train_features,valid_features,trend_estimator,scaler =  self._prepare_features(train_data, valid_period)
+            train_features,trend_estimator,scaler =  self.prepare_train_features(train_data)
             self.trend_estimator = trend_estimator
             self.scaler = scaler
         else:
@@ -345,29 +322,30 @@ class ForecasterBase(object):
             trend_estimators = dict()
             scalers = dict()
             all_train_features = list()
-            all_valid_features = list()
             ts_uid_values = train_data.loc[:, self.ts_uid_columns].drop_duplicates()
             for _,row in ts_uid_values.iterrows():
                 query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
                 train_data_chunk = train_data.query(query_string)
-                train_features,valid_features,trend_estimator,scaler = self._prepare_features(train_data_chunk, valid_period)
+                train_features,trend_estimator,scaler = self.prepare_train_features(train_data_chunk)
                 all_train_features.append(train_features)
-                all_valid_features.append(valid_features)
                 key = tuple([item for _,item in row.iteritems()])
                 trend_estimators[key] = trend_estimator
                 scalers[key] = scaler
-            train_features = pd.concat(all_train_features).reset_index(drop=True)
-            valid_features = pd.concat(all_valid_features).reset_index(drop=True)
             self.trend_estimators = trend_estimators
             self.scalers = scalers
-        
-        self.train_data = (pd.concat([train_features,valid_features])
+            # ensures that 'train_features' keeps the same order as in 'train_data'
+            train_features = (pd.concat(all_train_features)
+                              .loc[train_data.index, :])
+        self.train_data = (train_features
                            .loc[:, list(train_data.columns) + ["y_raw"]])
-        
+        if valid_index is not None:
+            valid_features = train_features.loc[valid_index, :]
+            train_features = train_features.drop(valid_index, axis=0)
+ 
         # performs the encoding of categorical features
         if len(self.categorical_features) > 0:
             train_features,categorical_encoders = self._encode_categorical_features(train_features, self.categorical_features, self.ts_uid_columns)
-            if valid_period is not None:
+            if valid_index is not None:
                 for feature,encoder in categorical_encoders.items():
                     transformed = encoder.transform(valid_features.loc[:, [feature]])
                     del valid_features[feature]
@@ -382,22 +360,22 @@ class ForecasterBase(object):
         self.input_features = [feature for feature in train_features.columns
                                if feature not in self.exclude_features]
         self.train_features = train_features
-        self.valid_period = valid_period
-        self.valid_features = valid_features if valid_period is not None else None
+        self.valid_index = valid_index
+        self.valid_features = valid_features if valid_index is not None else None
         self._features_already_prepared = True
         return self.train_features, self.valid_features
 
-    def fit(self, train_data=None, valid_period=None):
+    def fit(self, train_data=None, valid_index=None):
         """
         Parameters
         ----------
         train_data: pandas.DataFrame
             Dataframe with at least columns 'ds' and 'y'.
-        valid_period: pandas.DataFrame
-            Dataframe (with column 'ds') indicating the validation period.
+        valid_index: list | numpy.ndarray | pandas.Index
+            Array with indexes from train_data to be used for validation.
         """
         if not self._features_already_prepared:
-            train_features,valid_features = self.prepare_features(train_data, valid_period)
+            train_features,valid_features = self.prepare_features(train_data, valid_index)
         else:
             train_features = self.train_features
             valid_features = self.valid_features
