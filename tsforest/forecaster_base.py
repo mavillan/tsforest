@@ -283,14 +283,16 @@ class ForecasterBase(object):
             scaler = None
         return y_target,trend_estimator,scaler
 
-    def prepare_train_features(self, train_data):
+    def prepare_train_features(self, train_data, sort_by):
         """
         Parameters
         ----------
         train_data : pandas.DataFrame
             Dataframe with at least columns 'ds' and 'y'.
+        sort_by: list
+            List of column names to sort 'train_data'
         """
-        train_data = train_data.copy(deep=True)
+        train_data = train_data.sort_values(sort_by, axis=0)
         y_target,trend_estimator,scaler = self._prepare_target(train_data)
         train_data["y_raw"] = train_data.pop("y").values
         train_data["y"] = y_target
@@ -313,29 +315,27 @@ class ForecasterBase(object):
             (not self.detrend and 
              self.target_scaler is None and
              {"lag", "rw"}.intersection(self.feature_sets) == set())):
-            train_features,trend_estimator,scaler =  self.prepare_train_features(train_data)
+            train_features,trend_estimator,scaler =  self.prepare_train_features(train_data, sort_by=self.ts_uid_columns+["ds"])
             self.trend_estimator = trend_estimator
             self.scaler = scaler
         else:
             assert set(self.ts_uid_columns) <= set(train_data.columns), \
                 f"time series uid columns: {set(self.ts_uid_columns)-set(train_data.columns)} are missing."
-            trend_estimators = dict()
             scalers = dict()
+            trend_estimators = dict()
             all_train_features = list()
             ts_uid_values = train_data.loc[:, self.ts_uid_columns].drop_duplicates()
             for _,row in ts_uid_values.iterrows():
                 query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
                 train_data_chunk = train_data.query(query_string)
-                train_features,trend_estimator,scaler = self.prepare_train_features(train_data_chunk)
+                train_features,trend_estimator,scaler = self.prepare_train_features(train_data_chunk, sort_by=["ds"])
                 all_train_features.append(train_features)
                 key = tuple([item for _,item in row.iteritems()])
-                trend_estimators[key] = trend_estimator
                 scalers[key] = scaler
-            self.trend_estimators = trend_estimators
+                trend_estimators[key] = trend_estimator 
             self.scalers = scalers
-            # ensures that 'train_features' keeps the same order as in 'train_data'
-            train_features = (pd.concat(all_train_features)
-                              .loc[train_data.index, :])
+            self.trend_estimators = trend_estimators
+            train_features = pd.concat(all_train_features)
         self.train_data = (train_features
                            .loc[:, list(train_data.columns) + ["y_raw"]])
         if valid_index is not None:
