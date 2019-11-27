@@ -1,22 +1,31 @@
 import itertools
+import numpy as np
 import pandas as pd
 pd.set_option("display.max_colwidth", -1)
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
 
-def fit_evaluate(model_class, model_config, model_params, train_data, valid_index, eval_data, metric):
+def fit_evaluate(model_class, model_config, model_params, train_data, valid_indexes, metric):
     """
     Parameters
     ----------
     model_class_path: tuple
         Class path of the model: (module_name, class_name)
     """
+    errors = dict()
+    best_iterations = dict()
     model = model_class(model_params=model_params, **model_config)
-    model.fit(train_data, valid_index)
-    error = model.evaluate(eval_data, metric=metric)
-    error = 100*error/eval_data.y.mean()
-    return (model_params, model.best_iteration, error)
+    for i,valid_index in enumerate(valid_indexes):
+        model.fit(train_data, valid_index)
+        eval_data = train_data.loc[valid_index, :]
+        errors[f"fold{i}"] = model.evaluate(eval_data, metric=metric)
+        best_iterations[f"fold{i}"] = model.best_iteration
+    return (model_params,
+            np.mean(list(best_iterations.values())),
+            best_iterations,
+            np.mean(list(errors.values())),
+            errors)
 
 class GridSearch(object):
     """
@@ -74,16 +83,14 @@ class GridSearch(object):
         self.hyperparams_fixed = hyperparams_fixed
         self.n_jobs = n_jobs
 
-    def fit(self, train_data, valid_index=None, eval_data=None, metric="rmse"):
+    def fit(self, train_data, valid_indexes=None, metric="rmse"):
         """
         Parameters
         ----------
         train_data : pandas.DataFrame
             Dataframe with at least columns 'ds' and 'y'.
-        valid_index: list | numpy.ndarray | pandas.Index
-            Array with indexes from train_data to be used for validation.
-        eval_data : pandas.DataFrame
-            Dataframe with the same columns as 'train_data' over the prediction period.
+        valid_indexes: iterable list | numpy.ndarray | pandas.Index
+            Iterable object contaning the indexes from 'train_data' to be used for validation.
         metric: string
             Name of the error metric to be used.
         Returns
@@ -96,11 +103,6 @@ class GridSearch(object):
                              for combination in itertools.product(*params_values)]
         hyperparams_list = [{**hyperparams, **hyperparams_fixed} 
                             for hyperparams in _hyperparams_list]
-
-        if (valid_index is None) and (eval_data is None):
-            eval_data = train_data.loc[:, ["ds", "y"]]
-        elif eval_data is None:
-            eval_data = train_data.loc[valid_index, :]
 
         # parallel fit & evaluation of model on hyperparams
         model_config = {"feature_sets":self.feature_sets,
@@ -117,8 +119,7 @@ class GridSearch(object):
         kwargs = {"model_class":self.model_class,
                   "model_config":model_config,
                   "train_data":train_data,
-                  "valid_index":valid_index,
-                  "eval_data":eval_data,
+                  "valid_indexes":valid_indexes,
                   "metric":metric}
         
         with Parallel(n_jobs=self.n_jobs) as parallel:
@@ -128,13 +129,13 @@ class GridSearch(object):
                                     for model_params in tqdm_hyperparams_list)
             tqdm_hyperparams_list.close()
         # removes fixed hyperparams from results
-        results = [({key:value for (key,value) in r[0].items() 
-                     if key not in hyperparams_fixed.keys()}, r[1], r[2]) 
+        results = [({key:value for key,value in r[0].items() 
+                     if key not in hyperparams_fixed.keys()}, r[1], r[2], r[3], r[4]) 
                     for r in _results]
         # sort the results by error
-        results.sort(key = lambda x: x[-1])
-        results_dataframe = pd.DataFrame([(r[0],r[1],r[2]) for r in results],
-                                         columns=["hyperparams", "best_iteration", "error"])
+        results.sort(key = lambda x: x[-2])
+        columns = ["hyperparams", "best_iteration", "best_iteration_by_fold", "error", "error_by_fold"]
+        results_dataframe = pd.DataFrame(results, columns=columns)
         self.results = results
         self.results_dataframe = results_dataframe
         
