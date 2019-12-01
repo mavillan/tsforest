@@ -360,10 +360,20 @@ class ForecasterBase(object):
         self.input_features = [feature for feature in train_features.columns
                                if feature not in self.exclude_features]
         self.train_features = train_features
-        self.valid_index = valid_index
         self.valid_features = valid_features if valid_index is not None else None
         self._features_already_prepared = True
         return self.train_features, self.valid_features
+    
+    def set_features(self, train_features, valid_features=None):
+        _categorical_features = [feature for feature,encoder in self.categorical_features.items() 
+                                 if encoder == "default"]
+        self._categorical_features = _categorical_features
+        self.raw_features = train_features.columns
+        self.input_features = [feature for feature in train_features.columns
+                               if feature not in self.exclude_features] 
+        self.train_features = train_features
+        self.valid_features = valid_features
+        self._features_already_prepared = True
 
     def fit(self, train_data=None, valid_index=None):
         """
