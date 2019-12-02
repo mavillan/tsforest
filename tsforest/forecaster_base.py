@@ -371,7 +371,7 @@ class ForecasterBase(object):
         self._features_already_prepared = True
         return self.train_features, self.valid_features
 
-    def fit(self, train_data=None, valid_index=None):
+    def fit(self, train_data=None, valid_index=None, fit_kwargs=dict()):
         """
         Parameters
         ----------
@@ -379,6 +379,8 @@ class ForecasterBase(object):
             Dataframe with at least columns 'ds' and 'y'.
         valid_index: list | numpy.ndarray | pandas.Index
             Array with indexes from train_data to be used for validation.
+        fit_kwargs: dict
+            Extra arguments passed to the fit/train call of the model. 
         """
         if not self._features_already_prepared:
             train_features,valid_features = self.prepare_features(train_data, valid_index)
@@ -389,7 +391,8 @@ class ForecasterBase(object):
                   "valid_features":valid_features,
                   "input_features":self.input_features,
                   "categorical_features":self._categorical_features,
-                  "target":"y"}
+                  "target":"y",
+                  "fit_kwargs":fit_kwargs}
         self.model.fit(**kwargs)
         self.best_iteration = self.model.best_iteration
 

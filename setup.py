@@ -6,7 +6,7 @@ with open('requirements.txt', 'r') as f:
 
 setup(
     name='tsforest',
-    version='0.2.13',
+    version='0.2.14',
     author='Martín Villanueva',
     author_email='nallivam@gmail.com',
     packages=find_packages(),
