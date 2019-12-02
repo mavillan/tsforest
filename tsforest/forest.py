@@ -12,6 +12,12 @@ class H2OGBMRegressor(BaseRegressor):
     def __init__(self, model_params):
         self.model_params = {**gbm_parameters, **model_params}
         self.model = None
+    
+    def set_params(self, model_params):
+        self.model_params = {**gbm_parameters, **model_params}
+    
+    def get_params(self):
+        return self.model_params
 
     def cast_dataframe(self, features_dataframe, input_features, target,  categorical_features):
         features_types = {feature:"categorical" for feature in categorical_features
@@ -61,6 +67,12 @@ class LightGBMRegressor(BaseRegressor):
         self.model_params = {**lgbm_parameters, **model_params}
         self.model = None
 
+    def set_params(self, model_params):
+        self.model_params = {**lgbm_parameters, **model_params}
+    
+    def get_params(self):
+        return self.model_params
+
     def cast_dataframe(self, features_dataframe, input_features, target, categorical_features):
         dataset_params = {"data":features_dataframe.loc[:, input_features],
                           "categorical_feature":categorical_features,
@@ -107,6 +119,12 @@ class CatBoostRegressor(BaseRegressor):
     def __init__(self, model_params):
         self.model_params = {**cat_parameters, **model_params}
         self.model = None
+
+    def set_params(self, model_params):
+        self.model_params = {**cat_parameters, **model_params}
+    
+    def get_params(self):
+        return self.model_params
 
     def cast_dataframe(self, features_dataframe, input_features, target,  categorical_features):
         dataset_params = {"data":features_dataframe.loc[:, input_features],
@@ -155,6 +173,12 @@ class XGBoostRegressor(BaseRegressor):
     def __init__(self, model_params):
         self.model_params = {**xgb_parameters, **model_params}
         self.model = None
+
+    def set_params(self, model_params):
+        self.model_params = {**xgb_parameters, **model_params}
+    
+    def get_params(self):
+        return self.model_params
 
     def cast_dataframe(self, features_dataframe, input_features, target,  categorical_features):
         dataset_params = {"data":features_dataframe.loc[:, input_features]}

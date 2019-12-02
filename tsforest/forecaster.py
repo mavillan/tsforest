@@ -7,22 +7,23 @@ class H2OGBMForecaster(ForecasterBase):
         super(H2OGBMForecaster, self).__init__(*args, **kwargs)
         # init the cluster if is not already up
         if h2o.cluster() is None: h2o.init(nthreads=-1)
-        self.model = H2OGBMRegressor(kwargs['model_params'])
+        model_params = kwargs["model_params"] if "model_params" in kwargs else dict()
+        self.model = H2OGBMRegressor(model_params)
 
 class LightGBMForecaster(ForecasterBase):
     def __init__(self, *args, **kwargs):
         super(LightGBMForecaster, self).__init__(*args, **kwargs)
-        self.model = LightGBMRegressor(kwargs['model_params'])
+        self.model = LightGBMRegressor(self.model_params)
 
 class CatBoostForecaster(ForecasterBase):
     def __init__(self, *args, **kwargs):
         super(CatBoostForecaster, self).__init__(*args, **kwargs)
-        self.model = CatBoostRegressor(kwargs['model_params'])
+        self.model = CatBoostRegressor(self.model_params)
 
 class XGBoostForecaster(ForecasterBase):
     def __init__(self, *args, **kwargs):
         super(XGBoostForecaster, self).__init__(*args, **kwargs)
-        self.model = XGBoostRegressor(kwargs['model_params'])
+        self.model = XGBoostRegressor(self.model_params)
         for feature,encoding in self.categorical_features.items():
             if encoding == "default":
                 self.categorical_features[feature] = "CatBoostEncoder"

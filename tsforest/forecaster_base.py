@@ -82,6 +82,13 @@ class ForecasterBase(object):
         self._features_already_prepared = False
         self._validate_inputs()
     
+    def set_params(self, model_params):
+        self.model_params = model_params
+        self.model.set_params(model_params)
+    
+    def get_params(self):
+        return self.model.get_params()
+    
     def _validate_inputs(self):
         """
         Validates the inputs
