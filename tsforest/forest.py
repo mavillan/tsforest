@@ -218,7 +218,6 @@ class XGBoostRegressor(BaseRegressor):
                            "early_stopping_rounds":model_params.pop("early_stopping_rounds")}
         if valid_features is not None:
             training_params["evals"] = [(valid_features_casted,"eval"),]
-            training_params["verbose_eval"] = False
         elif "early_stopping_rounds" in training_params:
             del training_params["early_stopping_rounds"]
         training_params["params"] = model_params
