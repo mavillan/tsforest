@@ -24,10 +24,6 @@ def compute_train_features(data, include_features, lags, window_sizes, window_fu
     all_features: pd.Dataframe
         Dataframe containing all the features for the time series.
     """
-    train_data = data
-    # in case of time gaps
-    filled_data = fill_time_gaps(data)
-
     # list with all the dataframes of features
     all_features_list = list()
 
@@ -43,7 +39,11 @@ def compute_train_features(data, include_features, lags, window_sizes, window_fu
         columns_to_drop = calendar_cyclical_features_names
         calendar_features.drop(columns=columns_to_drop, inplace=True)
     all_features_list.append(calendar_features.set_index("ds"))
-            
+
+    # filling time gaps for 'lag' and 'rw' features
+    if {"lag", "rw"} & set(include_features):
+        filled_data = fill_time_gaps(data)
+
     if "lag" in include_features:
         lag_features = (compute_lag_features(filled_data, lags=lags)
                         .merge(data.loc[:, ["ds"]], how="inner", on=["ds"]))
