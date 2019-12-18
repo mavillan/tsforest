@@ -160,8 +160,7 @@ class CatBoostRegressor(BaseRegressor):
         valid_features_casted = self.cast_dataframe(valid_features, input_features, target, categorical_features) \
                                 if valid_features is not None else None
         model_params = dict(self.model_params)
-        training_params = {"X":train_features_casted,
-                           "verbose":False}
+        training_params = {"X":train_features_casted}
         if valid_features is not None:
             training_params["eval_set"] = valid_features_casted
         elif "early_stopping_rounds" in model_params:
