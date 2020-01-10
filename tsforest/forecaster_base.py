@@ -159,14 +159,10 @@ class ForecasterBase(object):
         elif not ({"ds", "y"} <= set(train_data.columns.values)):
             raise ValueError("'train_data' should contain columns 'ds' and 'y'.")
         
-        if valid_index is not None:
-            if (not isinstance(valid_index, list) and
-                not isinstance(valid_index, np.ndarray) and
-                not isinstance(valid_index, pd.Index)):
-                raise TypeError("Parameter 'valid_index' should be of type 'list', 'numpy.ndarray' or 'pandas.Index'.")
-            elif not (set(valid_index) <= set(train_data.index)):
-                raise ValueError("Parameter 'valid_index' should only contain index values present in 'train_data.index'.") 
-
+        if not isinstance(valid_index, pd.Index):
+            raise TypeError("Parameter 'valid_index' should be of type 'pandas.Index'.")
+        elif not (set(valid_index) <= set(train_data.index)):
+            raise ValueError("Parameter 'valid_index' should only contain index values present in 'train_data.index'.") 
     
     def _validate_predict_data(self, predict_data):
         if not isinstance(predict_data, pd.DataFrame):
@@ -264,7 +260,7 @@ class ForecasterBase(object):
         features_to_keep = [feature for feature in predict_features.columns if feature in self.raw_features]
         return predict_features.loc[:, features_to_keep]
     
-    def _prepare_target(self, data):
+    def _prepare_target(self, data, valid_index):
         """
         Prepares the target variable
 
@@ -272,48 +268,54 @@ class ForecasterBase(object):
         ----------
         data: pd.DataFrame
             Dataframe containing the columns 'ds' and 'y'.
+        valid_index: pandas.Index
+            Array with indexes from data to be used for validation.
         """
-        y_target = data.y.values.copy().astype(float)
+        data = data.copy()
+        data.y = data.y.astype(float)
+        train_index = data.index.difference(valid_index)
         if self.detrend:
             trend_estimator = TrendEstimator()
-            trend_estimator.fit(data=data.loc[:, ["ds", "y"]])
+            trend_estimator.fit(data=data.loc[train_index, ["ds", "y"]])
             trend_dataframe = trend_estimator.predict(data.loc[:, ["ds"]])
-            y_target -= trend_dataframe.trend.values
+            data.loc[:, "y"] -= trend_dataframe.trend.values
         else:
             trend_estimator = None   
         if self.target_scaler is not None:
             scaler_class = getattr(preprocessing, self.target_scaler)
             scaler = scaler_class(**self.target_scaler_kwargs)
-            scaler.fit(y_target.reshape(-1,1))
-            y_target = scaler.transform(y_target.reshape(-1,1)).ravel()
+            scaler.fit(data.loc[train_index].y.values.reshape(-1,1))
+            data.loc[:, "y"] = scaler.transform(data.y.values.reshape(-1,1)).ravel()
         else:
             scaler = None
-        return y_target,trend_estimator,scaler
+        return data.y.values, trend_estimator, scaler
 
-    def prepare_train_features(self, train_data, sort_by):
+    def prepare_train_features(self, train_data, valid_index, sort_by):
         """
         Parameters
         ----------
         train_data : pandas.DataFrame
             Dataframe with at least columns 'ds' and 'y'.
+        valid_index: pandas.Index
+            Array with indexes from train_data to be used for validation.
         sort_by: list
             List of column names to sort 'train_data'
         """
         train_data = train_data.sort_values(sort_by, axis=0)
-        y_target,trend_estimator,scaler = self._prepare_target(train_data)
+        y_target,trend_estimator,scaler = self._prepare_target(train_data, valid_index)
         train_data["y_raw"] = train_data.pop("y").values
         train_data["y"] = y_target
         train_features = self._prepare_train_features(train_data)
         train_features.set_index(train_data.index, inplace=True)
         return train_features,trend_estimator,scaler
     
-    def prepare_features(self, train_data, valid_index=None):
+    def prepare_features(self, train_data, valid_index=pd.Int64Index([])):
         """
         Parameters
         ----------
         train_data : pandas.DataFrame
             Dataframe with at least columns 'ds' and 'y'.
-        valid_index: list | numpy.ndarray | pandas.Index
+        valid_index: pandas.Index
             Array with indexes from train_data to be used for validation.
         """
         self._validate_input_data(train_data, valid_index)
@@ -322,7 +324,7 @@ class ForecasterBase(object):
             (not self.detrend and 
              self.target_scaler is None and
              {"lag", "rw"}.intersection(self.feature_sets) == set())):
-            train_features,trend_estimator,scaler =  self.prepare_train_features(train_data, sort_by=self.ts_uid_columns+["ds"])
+            train_features,trend_estimator,scaler =  self.prepare_train_features(train_data, valid_index, sort_by=self.ts_uid_columns+["ds"])
             self.trend_estimator = trend_estimator
             self.scaler = scaler
         else:
@@ -335,7 +337,8 @@ class ForecasterBase(object):
             for _,row in ts_uid_values.iterrows():
                 query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
                 train_data_chunk = train_data.query(query_string)
-                train_features,trend_estimator,scaler = self.prepare_train_features(train_data_chunk, sort_by=["ds"])
+                valid_index_chunk = train_data_chunk.index.intersection(valid_index)
+                train_features,trend_estimator,scaler = self.prepare_train_features(train_data_chunk, valid_index_chunk, sort_by=["ds"])
                 all_train_features.append(train_features)
                 key = tuple([item for _,item in row.iteritems()])
                 scalers[key] = scaler
@@ -345,14 +348,14 @@ class ForecasterBase(object):
             train_features = pd.concat(all_train_features)
         self.train_data = (train_features
                            .loc[:, list(train_data.columns) + ["y_raw"]])
-        if valid_index is not None:
+        if len(valid_index) > 0:
             valid_features = train_features.loc[valid_index, :]
             train_features = train_features.drop(valid_index, axis=0)
  
         # performs the encoding of categorical features
         if len(self.categorical_features) > 0:
             train_features,categorical_encoders = self._encode_categorical_features(train_features, self.categorical_features, self.ts_uid_columns)
-            if valid_index is not None:
+            if len(valid_index) > 0:
                 for feature,encoder in categorical_encoders.items():
                     transformed = encoder.transform(valid_features.loc[:, [feature]])
                     del valid_features[feature]
@@ -367,17 +370,17 @@ class ForecasterBase(object):
         self.input_features = [feature for feature in train_features.columns
                                if feature not in self.exclude_features]
         self.train_features = train_features
-        self.valid_features = valid_features if valid_index is not None else None
+        self.valid_features = valid_features if len(valid_index) > 0 else None
         self._features_already_prepared = True
         return self.train_features, self.valid_features
 
-    def fit(self, train_data=None, valid_index=None, fit_kwargs=dict()):
+    def fit(self, train_data=None, valid_index=pd.Int64Index([]), fit_kwargs=dict()):
         """
         Parameters
         ----------
         train_data: pandas.DataFrame
             Dataframe with at least columns 'ds' and 'y'.
-        valid_index: list | numpy.ndarray | pandas.Index
+        valid_index: pandas.Index
             Array with indexes from train_data to be used for validation.
         fit_kwargs: dict
             Extra arguments passed to the fit/train call of the model. 
