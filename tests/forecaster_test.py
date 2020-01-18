@@ -180,8 +180,8 @@ class TestForecaster(unittest.TestCase):
         fcaster.fit(train_data=self.train_data)
         error = fcaster.evaluate(self.eval_data)
 
-        assert error <= 2.5, \
-            f"fcaster.evaluate returns error={error} which is greater than 2.5"
+        assert error <= 3.0, \
+            f"fcaster.evaluate returns error={error} which is greater than 3.0"
 
     def test_it_fit_evaluate_with_lag_features_with_bounded_error(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
@@ -194,8 +194,8 @@ class TestForecaster(unittest.TestCase):
         fcaster.fit(train_data=self.train_data)
         error = fcaster.evaluate(self.eval_data)
 
-        assert error <= 2.5, \
-            f"fcaster.evaluate returns error={error} which is greater than 2.5"
+        assert error <= 3.0, \
+            f"fcaster.evaluate returns error={error} which is greater than 3.0"
 
     def test_it_fit_evaluate_with_rw_features_with_bounded_error(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
@@ -209,8 +209,8 @@ class TestForecaster(unittest.TestCase):
         fcaster.fit(train_data=self.train_data)
         error = fcaster.evaluate(self.eval_data)
 
-        assert error <= 2.5, \
-            f"fcaster.evaluate returns error={error} which is greater than 2.5"
+        assert error <= 3.0, \
+            f"fcaster.evaluate returns error={error} which is greater than 3.0"
 
     def test_it_fit_evaluate_with_detrend_with_bounded_error(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
@@ -226,8 +226,8 @@ class TestForecaster(unittest.TestCase):
         fcaster.fit(train_data=self.train_data)
         error = fcaster.evaluate(self.eval_data)
 
-        assert error <= 2.5, \
-            f"fcaster.evaluate returns error={error} which is greater than 2.5"
+        assert error <= 3.0, \
+            f"fcaster.evaluate returns error={error} which is greater than 3.0"
 
     def test_it_fit_evaluate_with_scaling_with_bounded_error(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
@@ -243,8 +243,8 @@ class TestForecaster(unittest.TestCase):
         fcaster.fit(train_data=self.train_data)
         error = fcaster.evaluate(self.eval_data)
 
-        assert error <= 2.5, \
-            f"fcaster.evaluate returns error={error} which is greater than 2.5"
+        assert error <= 3.0, \
+            f"fcaster.evaluate returns error={error} which is greater than 3.0"
 
     def test_it_fit_evaluate_with_detrend_and_scaling_with_bounded_error(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
@@ -263,5 +263,5 @@ class TestForecaster(unittest.TestCase):
         fcaster.fit(train_data=self.train_data)
         error = fcaster.evaluate(self.eval_data)
 
-        assert error <= 2.5, \
-            f"fcaster.evaluate returns error={error} which is greater than 2.5"
+        assert error <= 3.0, \
+            f"fcaster.evaluate returns error={error} which is greater than 3.0"
