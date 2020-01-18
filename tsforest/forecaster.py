@@ -9,6 +9,9 @@ class H2OGBMForecaster(ForecasterBase):
         if h2o.cluster() is None: h2o.init(nthreads=-1)
         model_params = kwargs["model_params"] if "model_params" in kwargs else dict()
         self.model = H2OGBMRegressor(model_params)
+        for feature,encoding in self.categorical_features.items():
+            if encoding == "default":
+                self.categorical_features[feature] = "CatBoostEncoder"
 
 class LightGBMForecaster(ForecasterBase):
     def __init__(self, *args, **kwargs):
