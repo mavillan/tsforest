@@ -101,8 +101,8 @@ def compute_stl_trend(stl_model, predict_dataframe=None):
     stl_trend.rename(columns={"y":"trend"}, inplace=True)
     # calculating the number of predictions to predict
     delta = predict_dataframe.ds.max() - stl_trend.index.max()
-    freq = pd.infer_freq(predict_dataframe.ds)
-    n_periods = int(delta / np.timedelta64(1, freq))
+    freq = stl_trend.index.diff().min()
+    n_periods = int(delta / freq)
     # predicting
     stl_fcst = forecast(stl_model, steps=n_periods, fc_func=drift)
     stl_fcst.rename(columns={"drift":"trend"}, inplace=True)
