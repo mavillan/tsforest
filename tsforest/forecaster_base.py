@@ -242,8 +242,8 @@ class ForecasterBase(object):
         if "calendar_anomaly" in predict_features.columns:
             assert len(self.calendar_anomaly) != 0, \
                 "'calendar_anomaly' column found, but no names of affected features were provided."
-            assert set(self.calendar_anomaly) <= set(train_features.columns), \
-                f"Calendar anomaly affected columns: {set(self.calendar_anomaly)-set(train_features.columns)} are not present in 'train_features'."
+            assert set(self.calendar_anomaly) <= set(self.train_features.columns), \
+                f"Calendar anomaly affected columns: {set(self.calendar_anomaly)-set(self.train_features.columns)} are not present in 'train_features'."
             idx = predict_features.query("calendar_anomaly == 1").index
             predict_features.loc[idx, self.calendar_anomaly] = np.nan
         if len(self.categorical_features) > 0:

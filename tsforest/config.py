@@ -52,7 +52,6 @@ prophet_kwargs = {
     "n_changepoints":120,
     "changepoint_range":0.9,
     "changepoint_prior_scale":0.05,
-    "mcmc_samples":0,
     "uncertainty_samples":0,
     "wk_fourier_order" : 3,
     "wk_prior_scale"   : 10.,
