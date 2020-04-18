@@ -8,13 +8,15 @@ time_features_mapping = {"year_week":"weekofyear",
                          "month_day":"day",
                          "week_day":"dayofweek"}
 
-def compute_train_features(data, time_features, lags, window_sizes, 
+def compute_train_features(data, ts_uid_columns, time_features, lags, window_sizes, 
                            window_functions, ignore_const_cols=True):
     """
     Parameters
     ----------
     data : pd.DataFrame
         Dataframe with (at least) columns: 'ds' and 'y'.
+    ts_uid_columns: list
+        List of columns names that are unique identifiers for time series.
     time_features: list
         Time attributes to include as features.
     lags: list
@@ -39,30 +41,35 @@ def compute_train_features(data, time_features, lags, window_sizes,
                         "time_features":time_features,
                         "ignore_const_cols":ignore_const_cols}
         calendar_features = compute_calendar_features(**input_params)
-        all_features_list.append(calendar_features.set_index("ds"))
+        for ts_uid in ts_uid_columns:
+            calendar_features[ts_uid] = data.loc[:, ts_uid].values
+        all_features_list.append(calendar_features.set_index(["ds"]+ts_uid_columns))
 
     # filling time gaps for 'lag' and 'rw' features
-    if len(lags) > 0 or (len(window_sizes) > 0 & len(window_functions) > 0):
-        filled_data = fill_time_gaps(data)
+    #if len(lags) > 0 or (len(window_sizes) > 0 & len(window_functions) > 0):
+    #    filled_data = fill_time_gaps(data)
 
     if len(lags) > 0:
-        lag_features = (compute_lag_features(filled_data, lags=lags)
-                        .merge(data.loc[:, ["ds"]], how="inner", on=["ds"]))
-        all_features_list.append(lag_features.set_index("ds"))
+        lag_features = (compute_lag_features(data, ts_uid_columns, lags=lags)
+                        .merge(data.loc[:, ["ds"]+ts_uid_columns], 
+                               how="inner", 
+                               on=["ds"]+ts_uid_columns))
+        all_features_list.append(lag_features.set_index(["ds"]+ts_uid_columns))
 
     if len(window_sizes) > 0 & len(window_functions) > 0:
-        rw_features = (compute_rw_features(filled_data, 
-                                            window_sizes=window_sizes, 
-                                            window_functions=window_functions)
-                        .merge(data.loc[:, ["ds"]], how="inner", on=["ds"]))
-        all_features_list.append(rw_features.set_index("ds"))
+        rw_features = (compute_rw_features(data, 
+                                           ts_uid_columns,
+                                           window_sizes=window_sizes, 
+                                           window_functions=window_functions)
+                        .merge(data.loc[:, ["ds"]+ts_uid_columns], 
+                               how="inner", 
+                               on=["ds"]+ts_uid_columns))
+        all_features_list.append(rw_features.set_index(["ds"]+ts_uid_columns))
 
     # merging all features
-    all_features_list.append(data.set_index("ds"))
-    all_features = (pd.concat(all_features_list, axis=1)
-                    .reset_index()
-                    .rename({"index":"ds"}, axis=1)
-                    .assign(y = lambda x: x["y"].fillna(0.)))
+    all_features_list.append(data.set_index(["ds"]+ts_uid_columns))
+    all_features = pd.concat(all_features_list, axis=1)
+    all_features.reset_index(inplace=True)
     return all_features
 
 def compute_predict_features(data, time_features, lags, window_sizes, 
@@ -96,7 +103,7 @@ def compute_predict_features(data, time_features, lags, window_sizes,
                         "time_features":time_features,
                         "ignore_const_cols":ignore_const_cols}
         calendar_features = compute_calendar_features(**input_params)
-        all_features_list.append(calendar_features.set_index("ds"))
+        all_features_list.append(calendar_features.set_index(["ds"]))
 
     if len(lags) > 0:
         column_names = [f"lag_{lag}" for lag in lags]
@@ -113,25 +120,10 @@ def compute_predict_features(data, time_features, lags, window_sizes,
         all_features_list.append(rw_features)
     
     # merging all features
-    all_features_list.append(data.set_index("ds"))
+    all_features_list.append(data.set_index(["ds"]))
     all_features = pd.concat(all_features_list, axis=1)
     all_features.reset_index(inplace=True)
     return all_features
-
-def fill_time_gaps(data, freq="D"):
-    """
-    Parameters
-    ----------
-    data: pandas.DataFrame
-        Dataframe with columns 'ds' (dtype datetime64) and 'y' 
-    """
-    assert set(["ds","y"]) <= set(data.columns), "Data must contain the column 'ds'."
-    filled_data = (data
-                   .resample(freq, on="ds").y.mean()
-                   .interpolate("linear")
-                   .reset_index())
-    filled_data = pd.merge(filled_data, data.drop("y", axis=1), on=["ds"], how="left")
-    return filled_data
 
 def compute_calendar_features(date_range, time_features, ignore_const_cols=True):
     """
@@ -201,24 +193,44 @@ def compute_calendar_features(date_range, time_features, ignore_const_cols=True)
 
     return calendar_data
 
-def compute_lag_features(data, lags):
+def fill_time_gaps(data, freq="D"):
+    """
+    Parameters
+    ----------
+    data: pandas.DataFrame
+        Dataframe with columns 'ds' (dtype datetime64) and 'y' 
+    """
+    assert set(["ds","y"]) <= set(data.columns), "Data must contain the column 'ds'."
+    filled_data = (data
+                   .resample(freq, on="ds").y.mean()
+                   .interpolate("linear")
+                   .reset_index())
+    filled_data = pd.merge(filled_data, data.drop("y", axis=1), on=["ds"], how="left")
+    return filled_data
+
+def compute_lag_features(data, ts_uid_columns, lags):
     """
     data: pandas.Dataframe
         dataframe with column 'y' (response values)
+    ts_uid_columns: list
+        List of columns names that are unique identifiers for time series.
     lags: list
         list of integer lag values
     """
     assert "y" in data.columns, "Missing 'y' column in dataframe."
-    features = [data.y.shift(lag) for lag in lags]
-    features_names = [f"lag_{lag}" for lag in lags]
-    lag_features = pd.concat([data.ds] + features, axis=1)
-    lag_features.columns = ["ds"] + features_names
-    return lag_features  
 
-def compute_rw_features(data, window_sizes, window_functions):
+    features_values = [data.groupby(ts_uid_columns)["y"].shift(lag) for lag in lags]
+    features_names = [f"lag_{lag}" for lag in lags]
+    lag_features = pd.concat([data.loc[:, ["ds"]+ts_uid_columns]] + features_values, axis=1, ignore_index=True)
+    lag_features.columns = ["ds"] + ts_uid_columns + features_names
+    return lag_features
+
+def compute_rw_features(data, ts_uid_columns, window_sizes, window_functions):
     """
     data: pandas.Dataframe
         dataframe with column 'y' (response values)
+    ts_uid_columns: list
+        List of columns names that are unique identifiers for time series.
     window_sizes: list
         list of integer window sizes values
     window_functions: list
@@ -226,13 +238,17 @@ def compute_rw_features(data, window_sizes, window_functions):
     """
     assert "y" in data.columns, "Missing 'y' column in dataframe"
     # assert window functions in availabe funcs...
-    shifted = data.y.shift(1)    
-    features = [getattr(shifted.rolling(window), window_func).__call__()
-                for window_func in window_functions
-                for window in window_sizes]
+    shifted = data.loc[:, ["ds","y"]+ts_uid_columns].copy()
+    shifted["y"] = shifted.groupby(ts_uid_columns)["y"].shift(1)
+     
+    features_values = [(getattr(shifted.groupby(ts_uid_columns)["y"].rolling(window), window_func)
+                        .__call__()
+                        .reset_index(0, drop=True))
+                       for window_func in window_functions
+                       for window in window_sizes]
     features_names = [f"{window_func}_{window}"
                       for window_func in window_functions
                       for window in window_sizes]
-    rw_features = pd.concat([data.ds] + features, axis=1)
-    rw_features.columns = ["ds"] + features_names
+    rw_features = pd.concat([data.loc[:, ["ds"]+ts_uid_columns]] + features_values, axis=1, ignore_index=True)
+    rw_features.columns = ["ds"] + ts_uid_columns + features_names
     return rw_features

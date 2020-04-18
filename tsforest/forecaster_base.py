@@ -47,22 +47,26 @@ class ForecasterBase(object):
     trend_models: dict
         Dictionary with ts_uid as key and TrendModel instances as value.
     target_scalers: dict
-        Dictionary with ts_uid as key and TrendModel instances as value.
+        Dictionary with ts_uid as key and sklearn.base.TransformerMixin as
+        value, a trained sklearn.base.TransformerMixin object.
     lags: list
         List of integer lag values to include as features.
     window_sizes: list
         List of integer window sizes values to include as features.
     window_functions: list
         List of string names of the window functions to include as features.
+    copy: bool
+        If True performs a copy over the dataframes provided, if False performs
+        inplace operations.
     """
     def __init__(self, model_params=dict(), time_features=[], exclude_features=[], 
                  categorical_features=dict(), calendar_anomaly=list(), ts_uid_columns=list(), 
                  trend_models=dict(), target_scalers=dict(), lags=list(), window_sizes=list(), 
-                 window_functions=list()):
+                 window_functions=list(), copy=False):
         self.model = None
         self.model_params = model_params
         self.time_features = time_features
-        self.exclude_features = ["ds", "y", "y_raw", "weight", "fold_column",
+        self.exclude_features = ["ds", "y", "y_raw", "weight", "fold_column", "trend",
                                  "zero_response", "calendar_anomaly"] + exclude_features
         self.categorical_features = categorical_features.copy()
         self.calendar_anomaly = calendar_anomaly
@@ -75,6 +79,7 @@ class ForecasterBase(object):
         self.lags = lags
         self.window_sizes = window_sizes
         self.window_functions = window_functions
+        self.copy = copy
         self._features_already_prepared = False
         self._validate_inputs()
     
@@ -160,17 +165,20 @@ class ForecasterBase(object):
 
         if not set(self.ts_uid_columns) <= set(train_data.columns):
             raise ValueError(f"Parameter 'train_data' has missing ts_uid_columns: {set(self.ts_uid_columns)-set(train_data.columns)}.")
+        
+        if "_ts_uid" in train_data.columns:
+            raise ValueError("Column '_ts_uid' is reserved for internal usage and can not be in 'train_data' dataframe.")
     
     def _validate_predict_data(self, predict_data):
         if not isinstance(predict_data, pd.DataFrame):
             raise TypeError("Parameter 'predict_data' should be of type pandas.DataFrame.")
-        elif not (set(self.train_data.columns) - set(predict_data.columns) == {"y", "y_raw"}):
+        elif not (self.predict_columns == set(predict_data.columns)):
             raise ValueError("'predict_data' shoud have the same columns as 'train_data' except for 'y'.")
     
     def _validate_evaluate_data(self, eval_data, metric):
         if not isinstance(eval_data, pd.DataFrame):
             raise TypeError("'eval_data' should be of type pandas.DataFrame.")
-        elif not (set(eval_data.columns) <= set(self.train_data.columns)):
+        elif not (self.evaluate_columns == set(eval_data.columns)):
             raise ValueError("'eval_data' should have the same columns as 'train_data'.")
 
         if not isinstance(metric, str):
@@ -196,30 +204,6 @@ class ForecasterBase(object):
             train_features[transformed.columns] = transformed 
             categorical_encoders[feature] = encoder
         return train_features,categorical_encoders
-      
-    def _prepare_train_features(self, train_data):
-        """
-        Parameters
-        ----------
-        train_data : pandas.DataFrame
-            Dataframe with at least columns 'ds' and 'y'.
-        """
-        train_features = compute_train_features(data=train_data,
-                                                time_features=self.time_features,
-                                                lags=self.lags,
-                                                window_sizes=self.window_sizes,
-                                                window_functions=self.window_functions,
-                                                ignore_const_cols=True)
-        if "zero_response" in train_features.columns:
-            train_features = train_features.query("zero_response != 1")
-        if "calendar_anomaly" in train_features.columns:
-            assert len(self.calendar_anomaly) != 0, \
-                "'calendar_anomaly' column found, but names of affected features were not provided."
-            assert set(self.calendar_anomaly) <= set(train_features.columns), \
-                f"Calendar anomaly affected columns: {set(self.calendar_anomaly)-set(train_features.columns)} are not present in 'train_features'."
-            idx = train_features.query("calendar_anomaly == 1").index
-            train_features.loc[idx, self.calendar_anomaly] = np.nan
-        return train_features
     
     def _prepare_predict_features(self, predict_data):
         """
@@ -257,47 +241,58 @@ class ForecasterBase(object):
         features_to_keep = [feature for feature in predict_features.columns if feature in self.raw_features]
         return predict_features.loc[:, features_to_keep]
     
-    def _prepare_target(self, data, trend_model, target_scaler):
+    def prepare_target(self, train_data):
         """
         Prepares the target variable
 
         Parameters
         ----------
-        data: pd.DataFrame
+        train_data: pd.DataFrame
             Dataframe containing the columns 'ds' and 'y'.
-        trend_model: TrendModel
-            Trained trend estimator model.
-        target_scaler: sklearn.base.TransformerMixin
-            Trained sklearn.base.TransformerMixin scaler.
         """
-        data = data.copy()
-        data.y = data.y.astype(float)
-        if trend_model is not None:
-            trend_dataframe = trend_model.predict(data.loc[:, ["ds"]]) 
-            data.loc[:, "y"] -= trend_dataframe.trend.values
-        if target_scaler is not None:
-            data.loc[:, "y"] = target_scaler.transform(data.y.values.reshape(-1,1)).ravel()
-        return data.y.values
+        train_data["y_raw"] = train_data["y"].copy()
+        ts_uid_values = train_data.loc[:, self.ts_uid_columns].drop_duplicates()
+        all_dataframes = list()
+        for _,row in ts_uid_values.iterrows():
+            key = tuple([item for _,item in row.iteritems()])
+            query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
+            train_data_slice = train_data.query(query_string).copy()
 
-    def prepare_train_features(self, train_data, trend_model, target_scaler, sort_by):
+            trend_model = self.trend_models[key] if len(self.trend_models) > 0 else None
+            target_scaler = self.target_scalers[key] if len(self.target_scalers) > 0 else None
+            if trend_model is not None:
+                trend_dataframe = trend_model.predict(train_data_slice.loc[:, ["ds"]]) 
+                train_data_slice["trend"] = trend_dataframe.trend.values
+                train_data_slice.loc[:, "y"] -= trend_dataframe.trend.values
+            if target_scaler is not None:
+                train_data_slice.loc[:, "y"] = target_scaler.transform(train_data_slice.y.values.reshape(-1,1)).ravel()
+            all_dataframes.append(train_data_slice)
+        
+        return pd.concat(all_dataframes)
+
+    def prepare_train_features(self, train_data):
         """
         Parameters
         ----------
         train_data : pandas.DataFrame
             Dataframe with at least columns 'ds' and 'y'.
-        trend_model: TrendModel
-            Trained trend estimator model.
-        target_scaler: sklearn.base.TransformerMixin
-            Trained sklearn.base.TransformerMixin scaler.
-        sort_by: list
-            List of column names to sort 'train_data'
         """
-        train_data = train_data.sort_values(sort_by, axis=0)
-        y_target = self._prepare_target(train_data, trend_model, target_scaler)
-        train_data["y_raw"] = train_data.pop("y").values
-        train_data["y"] = y_target
-        train_features = self._prepare_train_features(train_data)
-        train_features.set_index(train_data.index, inplace=True)
+        train_features = compute_train_features(data=train_data,
+                                                ts_uid_columns=self.ts_uid_columns,
+                                                time_features=self.time_features,
+                                                lags=self.lags,
+                                                window_sizes=self.window_sizes,
+                                                window_functions=self.window_functions,
+                                                ignore_const_cols=True)
+        if "zero_response" in train_features.columns:
+            train_features = train_features.query("zero_response != 1")
+        if "calendar_anomaly" in train_features.columns:
+            assert len(self.calendar_anomaly) != 0, \
+                "'calendar_anomaly' column found, but names of affected features were not provided."
+            assert set(self.calendar_anomaly) <= set(train_features.columns), \
+                f"Calendar anomaly affected columns: {set(self.calendar_anomaly)-set(train_features.columns)} are not present in 'train_features'."
+            idx = train_features.query("calendar_anomaly == 1").index
+            train_features.loc[idx, self.calendar_anomaly] = np.nan
         return train_features
     
     def prepare_features(self, train_data, valid_index=pd.Int64Index([])):
@@ -310,40 +305,34 @@ class ForecasterBase(object):
             Array with indexes from train_data to be used for validation.
         """
         self._validate_input_data(train_data, valid_index)
-        # adds a dummy 'ts_uid' column in case of single ts data
-        if len(self.ts_uid_columns) == 0: 
-            train_data["ts_uid"] = 0
-            ts_uid_columns = ["ts_uid"]
-        else:
-            ts_uid_columns = self.ts_uid_columns
+        self.predict_columns = set(train_data.columns) - {"y"}
+        self.evaluate_columns = set(train_data.columns)
+        if self.copy:
+            train_data = train_data.copy(deep=True)
 
-        if (len(self.trend_models) == 0 and
-            len(self.target_scalers) == 0 and
-            len(self.lags) == 0 and 
-            len(self.window_sizes) == 0 and
-            len(self.window_functions) == 0):
-              train_features = self.prepare_train_features(train_data, None, None, sort_by=ts_uid_columns+["ds"])
-        else:
-            all_train_features = list()
-            ts_uid_values = train_data.loc[:, ts_uid_columns].drop_duplicates()
-            for _,row in ts_uid_values.iterrows():
-                key = tuple([item for _,item in row.iteritems()])
-                query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
-                train_data_chunk = train_data.query(query_string)
-                trend_model = self.trend_models[key] if len(self.trend_models) > 0 else None
-                target_scaler = self.target_scalers[key] if len(self.target_scalers) > 0 else None
-                train_features = self.prepare_train_features(train_data_chunk, trend_model, target_scaler, sort_by=["ds"])
-                all_train_features.append(train_features)         
-            train_features = pd.concat(all_train_features)
+        if len(self.ts_uid_columns) == 0:
+            # adds a dummy '_ts_uid' column in case of single ts data
+            train_data["_ts_uid"] = 0
+            self.ts_uid_columns = ["_ts_uid"]
+        train_data.sort_values(self.ts_uid_columns+["ds"], axis=0, inplace=True)
 
-        self.train_data = train_features.loc[:, list(train_data.columns) + ["y_raw"]]
+        if len(self.trend_models) > 0 or len(self.target_scalers) > 0:
+            train_data = self.prepare_target(train_data)
+        else:
+            train_data["y_raw"] = train_data["y"].values
+        train_features = self.prepare_train_features(train_data)
+        # needed to keep track of the rows used in valid_index
+        train_features.set_index(train_data.index, inplace=True)
+
         if len(valid_index) > 0:
             valid_features = train_features.loc[valid_index, :]
             train_features = train_features.drop(valid_index, axis=0)
  
         # performs the encoding of categorical features
         if len(self.categorical_features) > 0:
-            train_features,categorical_encoders = self._encode_categorical_features(train_features, self.categorical_features, ts_uid_columns)
+            train_features,categorical_encoders = self._encode_categorical_features(train_features, 
+                                                                                    self.categorical_features, 
+                                                                                    self.ts_uid_columns)
             if len(valid_index) > 0:
                 for feature,encoder in categorical_encoders.items():
                     transformed = encoder.transform(valid_features.loc[:, [feature]])
@@ -358,6 +347,7 @@ class ForecasterBase(object):
         self.raw_features = train_features.columns
         self.input_features = [feature for feature in train_features.columns
                                if feature not in self.exclude_features]
+        self.train_data = train_data
         self.train_features = train_features
         self.valid_features = valid_features if len(valid_index) > 0 else None
         self._features_already_prepared = True
@@ -400,14 +390,13 @@ class ForecasterBase(object):
         prediction_dataframe: pandas.DataFrame
             Dataframe containing the dates 'ds' and predictions 'y_pred'.
         """
-        # adds a dummy 'ts_uid' column in case of single ts data
-        if len(self.ts_uid_columns) == 0: 
-            predict_data["ts_uid"] = 0
-            ts_uid_columns = ["ts_uid"]
-        else:
-            ts_uid_columns = self.ts_uid_columns
-        self._validate_predict_data(predict_data) 
-
+        self._validate_predict_data(predict_data)
+        if self.copy:
+            predict_data = predict_data.copy(deep=True)
+        if set(self.ts_uid_columns) == {"_ts_uid"}:
+            # adds a dummy 'ts_uid' column in case of single ts data
+            predict_data["_ts_uid"] = 0
+         
         if (len(self.trend_models) == 0 and
             len(self.target_scalers) == 0 and
             len(self.lags) == 0 and
@@ -423,7 +412,7 @@ class ForecasterBase(object):
                                     .loc[:, ["ds"]+self.ts_uid_columns]
                                     .assign(y_pred = prediction))
         else:
-            ts_uid_values = predict_data.loc[:, ts_uid_columns].drop_duplicates()
+            ts_uid_values = predict_data.loc[:, self.ts_uid_columns].drop_duplicates()
             all_predict_features = list()
             all_prediction_dataframes = list()
             for _,row in ts_uid_values.iterrows():
@@ -455,7 +444,7 @@ class ForecasterBase(object):
                 all_prediction_dataframes.append(_prediction_dataframe)
             self.predict_features = pd.concat(all_predict_features).reset_index(drop=True)
             prediction_dataframe = pd.concat(all_prediction_dataframes).reset_index(drop=True)
-        return prediction_dataframe 
+        return prediction_dataframe
 
     def _predict(self, model, predict_features, y_past):
         """
