@@ -221,10 +221,13 @@ def compute_lag_features(data, ts_uid_columns, lags):
     """
     assert "y" in data.columns, "Missing 'y' column in dataframe."
 
-    features_values = [data.groupby(ts_uid_columns)["y"].shift(lag) for lag in lags]
-    features_names = [f"lag_{lag}" for lag in lags]
-    lag_features = pd.concat([data.loc[:, ["ds"]+ts_uid_columns]] + features_values, axis=1, ignore_index=True)
-    lag_features.columns = ["ds"] + ts_uid_columns + features_names
+    lag_features = data.loc[:, ["ds","y"]+ts_uid_columns].copy(deep=True)
+    for lag in lags:
+        feature_name = f"lag_{lag}"
+        feature_value = lag_features.groupby(ts_uid_columns)["y"].shift(lag).values
+        lag_features[feature_name] = feature_value 
+    lag_features.drop("y", axis=1, inplace=True)
+
     return lag_features
 
 def compute_rw_features(data, ts_uid_columns, window_sizes, window_functions):
@@ -240,17 +243,14 @@ def compute_rw_features(data, ts_uid_columns, window_sizes, window_functions):
     """
     assert "y" in data.columns, "Missing 'y' column in dataframe"
     # assert window functions in availabe funcs...
-    shifted = data.loc[:, ["ds","y"]+ts_uid_columns].copy()
-    shifted["y"] = shifted.groupby(ts_uid_columns)["y"].shift(1)
-     
-    features_values = [(getattr(shifted.groupby(ts_uid_columns)["y"].rolling(window), window_func)
-                        .__call__()
-                        .reset_index(0, drop=True))
-                       for window_func in window_functions
-                       for window in window_sizes]
-    features_names = [f"{window_func}_{window}"
-                      for window_func in window_functions
-                      for window in window_sizes]
-    rw_features = pd.concat([data.loc[:, ["ds"]+ts_uid_columns]] + features_values, axis=1, ignore_index=True)
-    rw_features.columns = ["ds"] + ts_uid_columns + features_names
+
+    rw_features = data.loc[:, ["ds","y"]+ts_uid_columns].copy(deep=True)
+    rw_features["y"] = rw_features.groupby(ts_uid_columns)["y"].shift(1)
+    for window_func in window_functions:
+        for window in window_sizes:
+            feature_name = f"{window_func}_{window}"
+            feature_value = getattr(rw_features.groupby(ts_uid_columns)["y"].rolling(window), window_func).__call__().values
+            rw_features[feature_name] = feature_value
+    rw_features.drop("y", axis=1, inplace=True)
+
     return rw_features
