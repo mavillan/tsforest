@@ -56,7 +56,7 @@ def compute_train_features(data, ts_uid_columns, time_features, lags, window_siz
                                on=["ds"]+ts_uid_columns))
         all_features_list.append(lag_features.set_index(["ds"]+ts_uid_columns))
 
-    if len(window_sizes) > 0 & len(window_functions) > 0:
+    if (len(window_sizes) > 0) & (len(window_functions) > 0):
         rw_features = (compute_rw_features(data, 
                                            ts_uid_columns,
                                            window_sizes=window_sizes, 
@@ -72,13 +72,15 @@ def compute_train_features(data, ts_uid_columns, time_features, lags, window_siz
     all_features.reset_index(inplace=True)
     return all_features
 
-def compute_predict_features(data, time_features, lags, window_sizes, 
+def compute_predict_features(data, ts_uid_columns, time_features, lags, window_sizes, 
                              window_functions, ignore_const_cols=True):
     """
     Parameters
     ----------
     data : pd.DataFrame
         Dataframe with (at least) columns: 'ds' and 'y'.
+    ts_uid_columns: list
+        List of columns names that are unique identifiers for time series.
     time_features: list
         Time attributes to include as features.
     lags: list

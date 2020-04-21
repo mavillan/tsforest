@@ -104,7 +104,7 @@ class TestForecaster(unittest.TestCase):
 
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=self.train_data)
-        _ = fcaster.predict(self.predict_data)
+        _ = fcaster.predict(self.predict_data, recursive=True)
 
     def test_it_fit_predict_with_rw_features(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
@@ -116,7 +116,7 @@ class TestForecaster(unittest.TestCase):
 
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=self.train_data)
-        _ = fcaster.predict(self.predict_data)
+        _ = fcaster.predict(self.predict_data, recursive=True)
     
     def test_it_fit_predict_with_detrend(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
@@ -198,7 +198,7 @@ class TestForecaster(unittest.TestCase):
 
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=self.train_data)
-        error = fcaster.evaluate(self.eval_data)
+        error = fcaster.evaluate(self.eval_data, recursive=True)
 
         assert error <= 3.0, \
             f"fcaster.evaluate returns error={error} which is greater than 3.0"
@@ -213,7 +213,7 @@ class TestForecaster(unittest.TestCase):
 
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=self.train_data)
-        error = fcaster.evaluate(self.eval_data)
+        error = fcaster.evaluate(self.eval_data, recursive=True)
 
         assert error <= 3.0, \
             f"fcaster.evaluate returns error={error} which is greater than 3.0"

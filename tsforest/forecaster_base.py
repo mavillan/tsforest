@@ -166,19 +166,19 @@ class ForecasterBase(object):
         if not set(self.ts_uid_columns) <= set(train_data.columns):
             raise ValueError(f"Parameter 'train_data' has missing ts_uid_columns: {set(self.ts_uid_columns)-set(train_data.columns)}.")
         
-        if "_ts_uid" in train_data.columns:
-            raise ValueError("Column '_ts_uid' is reserved for internal usage and can not be in 'train_data' dataframe.")
+        if {"internal_ts_uid", "_internal_ts_uid"} in set(train_data.columns):
+            raise ValueError("Columns 'internal_ts_uid' and '_internal_ts_uid' is reserved for internal usage and can not be in 'train_data' dataframe.")
     
     def _validate_predict_data(self, predict_data):
         if not isinstance(predict_data, pd.DataFrame):
             raise TypeError("Parameter 'predict_data' should be of type pandas.DataFrame.")
-        elif not (self.predict_columns == set(predict_data.columns)):
+        elif not (set(self.raw_train_columns) - set(predict_data.columns) == {"y"}):
             raise ValueError("'predict_data' shoud have the same columns as 'train_data' except for 'y'.")
     
     def _validate_evaluate_data(self, eval_data, metric):
         if not isinstance(eval_data, pd.DataFrame):
             raise TypeError("'eval_data' should be of type pandas.DataFrame.")
-        elif not (self.evaluate_columns == set(eval_data.columns)):
+        elif not (set(self.raw_train_columns) == set(eval_data.columns)):
             raise ValueError("'eval_data' should have the same columns as 'train_data'.")
 
         if not isinstance(metric, str):
@@ -186,22 +186,23 @@ class ForecasterBase(object):
         elif metric not in AVAILABLE_METRICS:
             raise ValueError(f"'metric' should be any of these: {AVAILABLE_METRICS}")
     
-    def _encode_categorical_features(self, train_features, categorical_features, ts_uid_columns):
+    def _encode_categorical_features(self, train_features):
         categorical_encoders = dict()
-        for feature,encoding in categorical_features.items():
+        for feature,encoding in self.categorical_features.items():
             if encoding == "default": 
                 if not np.issubdtype(train_features[feature].dtype, np.number):
                     encoding = "OrdinalEncoder"
                 else: continue
             encoder_class = getattr(ce, encoding)
             encoder = encoder_class(cols=[feature])
-            if feature in ts_uid_columns:
-                encoder.fit(train_features.loc[:, [feature]], train_features.loc[:, "y_raw"].values)
-            else:
-                encoder.fit(train_features.loc[:, [feature]], train_features.loc[:, "y"].values)
+            encoder.fit(train_features.loc[:, [feature]], train_features.loc[:, "y_raw"].values)
             transformed = encoder.transform(train_features.loc[:, [feature]])
-            del train_features[feature]
-            train_features[transformed.columns] = transformed 
+            if feature in self.ts_uid_columns:
+                train_features["_"+feature] = transformed.values
+                self.exclude_features.append(feature)
+            else:
+                del train_features[feature]
+                train_features[feature] = transformed.values
             categorical_encoders[feature] = encoder
         return train_features,categorical_encoders
     
@@ -219,6 +220,7 @@ class ForecasterBase(object):
             the trained model.
         """
         predict_features = compute_predict_features(data=predict_data,
+                                                    ts_uid_columns=self.ts_uid_columns,
                                                     time_features=self.time_features,
                                                     lags=self.lags,
                                                     window_sizes=self.window_sizes,
@@ -232,12 +234,14 @@ class ForecasterBase(object):
                 f"Calendar anomaly affected columns: {set(self.calendar_anomaly)-set(self.train_features.columns)} are not present in 'train_features'."
             idx = predict_features.query("calendar_anomaly == 1").index
             predict_features.loc[idx, self.calendar_anomaly] = np.nan
-        if len(self.categorical_features) > 0:
+        if len(self.categorical_encoders) > 0:
             for feature,encoder in self.categorical_encoders.items():
                 transformed = encoder.transform(predict_features.loc[:, [feature]])
-                del predict_features[feature]
-                predict_features[transformed.columns] = transformed 
-
+                if feature in self.ts_uid_columns:
+                    predict_features["_"+feature] = transformed.values
+                else:
+                    del predict_features[feature]
+                    predict_features[feature] = transformed.values
         features_to_keep = [feature for feature in predict_features.columns if feature in self.raw_features]
         return predict_features.loc[:, features_to_keep]
     
@@ -305,17 +309,15 @@ class ForecasterBase(object):
             Array with indexes from train_data to be used for validation.
         """
         self._validate_input_data(train_data, valid_index)
-        self.predict_columns = set(train_data.columns) - {"y"}
-        self.evaluate_columns = set(train_data.columns)
+        self.raw_train_columns = train_data.columns
         if self.copy:
             train_data = train_data.copy(deep=True)
-
         if len(self.ts_uid_columns) == 0:
-            # adds a dummy '_ts_uid' column in case of single ts data
-            train_data["_ts_uid"] = 0
-            self.ts_uid_columns = ["_ts_uid"]
-        train_data.sort_values(self.ts_uid_columns+["ds"], axis=0, inplace=True)
-
+            # adds a dummy '_internal_ts_uid' column in case of single ts data
+            train_data["_internal_ts_uid"] = 0
+            self.ts_uid_columns = ["_internal_ts_uid"]
+        train_data = train_data.sort_values(self.ts_uid_columns+["ds"], axis=0)
+        
         if len(self.trend_models) > 0 or len(self.target_scalers) > 0:
             train_data = self.prepare_target(train_data)
         else:
@@ -330,15 +332,18 @@ class ForecasterBase(object):
  
         # performs the encoding of categorical features
         if len(self.categorical_features) > 0:
-            train_features,categorical_encoders = self._encode_categorical_features(train_features, 
-                                                                                    self.categorical_features, 
-                                                                                    self.ts_uid_columns)
+            train_features,categorical_encoders = self._encode_categorical_features(train_features)
             if len(valid_index) > 0:
                 for feature,encoder in categorical_encoders.items():
                     transformed = encoder.transform(valid_features.loc[:, [feature]])
-                    del valid_features[feature]
-                    valid_features[transformed.columns] = transformed 
+                    if feature in self.ts_uid_columns:
+                        valid_features["_"+feature] = transformed.values
+                    else:
+                        del train_features[feature]
+                        valid_features[feature] = transformed.values
             self.categorical_encoders = categorical_encoders
+        else:
+            self.categorical_encoders = dict()
         # categorical features to be encoded by the tree/boosting model
         _categorical_features = [feature for feature,encoder in self.categorical_features.items() 
                                  if encoder == "default"]
@@ -378,13 +383,16 @@ class ForecasterBase(object):
         self.model.fit(**kwargs)
         self.best_iteration = self.model.best_iteration
 
-    def predict(self, predict_data):
+    def predict(self, predict_data, recursive=False):
         """
         Parameters
         ----------
         predict_data: pandas.DataFrame
             Datafame containing the features for the prediction period.
             Contains the same columns as 'train_data' except for 'y'.
+        recursive: boolean
+            If True, perform recursive one-step-ahead predicion for the
+            lag and/or rolling window features.
         Returns
         ----------
         prediction_dataframe: pandas.DataFrame
@@ -393,85 +401,78 @@ class ForecasterBase(object):
         self._validate_predict_data(predict_data)
         if self.copy:
             predict_data = predict_data.copy(deep=True)
-        if set(self.ts_uid_columns) == {"_ts_uid"}:
-            # adds a dummy 'ts_uid' column in case of single ts data
-            predict_data["_ts_uid"] = 0
-         
-        if (len(self.trend_models) == 0 and
-            len(self.target_scalers) == 0 and
-            len(self.lags) == 0 and
-            len(self.window_sizes) == 0 and
-            len(self.window_functions) == 0):
-            predict_features = self._prepare_predict_features(predict_data)
+        if set(self.ts_uid_columns) == {"_internal_ts_uid"}:
+            # adds a dummy '_internal_ts_uid' column in case of single ts data
+            predict_data["_internal_ts_uid"] = 0
+
+        predict_features = self._prepare_predict_features(predict_data)
+        if not recursive:
             prediction = self.model.predict(predict_features)
-            if "zero_response" in predict_features.columns:
-                zero_response_mask = predict_features["zero_response"]==1
-                prediction[zero_response_mask] = 0
-            self.predict_features = predict_features
             prediction_dataframe = (predict_data
                                     .loc[:, ["ds"]+self.ts_uid_columns]
                                     .assign(y_pred = prediction))
         else:
-            ts_uid_values = predict_data.loc[:, self.ts_uid_columns].drop_duplicates()
-            all_predict_features = list()
-            all_prediction_dataframes = list()
+            predict_features.sort_values(self.ts_uid_columns+["ds"], axis=0, inplace=True)
+            _prediction_dataframe = self.recursive_predict(predict_features)
+            prediction_dataframe = pd.merge(predict_data.loc[:, ["ds"]+self.ts_uid_columns],
+                                            _prediction_dataframe, 
+                                            how="left", on=["ds"]+self.ts_uid_columns)
+        
+        if (len(self.trend_models) > 0 or
+            len(self.target_scalers) > 0):
+            ts_uid_values = prediction_dataframe.loc[:, self.ts_uid_columns].drop_duplicates()
             for _,row in ts_uid_values.iterrows():
                 key = tuple([item for _,item in row.iteritems()])
                 query_string = " & ".join([f"{col_name}=={value}" for col_name,value in row.iteritems()])
-                predict_data_chunk = predict_data.query(query_string)
-                predict_features = self._prepare_predict_features(predict_data_chunk)
-                if len(self.lags) > 0 or (len(self.window_sizes) > 0 and len(self.window_functions) > 0):
-                    y_past = self.train_data.query(query_string).y.values
-                    prediction = self._predict(self.model, predict_features, y_past)
-                else:
-                    prediction = self.model.predict(predict_features)
+                slice_idx = prediction_dataframe.query(query_string).index
                 
                 if len(self.target_scalers) > 0:
                     target_scaler = self.target_scalers[key]
-                    prediction = target_scaler.inverse_transform(prediction.reshape(-1,1)).ravel()
+                    target_scaled = prediction_dataframe.loc[slice_idx,"y_pred"].values.reshape(-1,1)
+                    target_unscaled = target_scaler.inverse_transform(target_scaled).ravel()
+                    prediction_dataframe.loc[slice_idx, "y_pred"] = target_unscaled
                 if len(self.trend_models) > 0:
                     trend_model = self.trend_models[key]
-                    trend_dataframe = trend_model.predict(predict_data_chunk.loc[:, ["ds"]])
-                    prediction += trend_dataframe.trend.values
-                if "zero_response" in predict_features.columns:
-                    zero_response_mask = predict_features["zero_response"]==1
-                    prediction[zero_response_mask] = 0
-                
-                _prediction_dataframe = (predict_data_chunk
-                                         .loc[:, ["ds"]+self.ts_uid_columns]
-                                         .assign(y_pred = prediction))
-                all_predict_features.append(predict_features)
-                all_prediction_dataframes.append(_prediction_dataframe)
-            self.predict_features = pd.concat(all_predict_features).reset_index(drop=True)
-            prediction_dataframe = pd.concat(all_prediction_dataframes).reset_index(drop=True)
+                    trend_dataframe = trend_model.predict(prediction_dataframe.loc[slice_idx, ["ds"]])
+                    prediction_dataframe.loc[slice_idx, "y_pred"] += trend_dataframe.trend.values
+
+        if "zero_response" in predict_features.columns:
+            zero_response_idx = predict_features.query("zero_response == 1").index
+            prediction_dataframe.loc[zero_response_idx, "y_pred"] = 0
+
+        self.predict_features = predict_features
         return prediction_dataframe
 
-    def _predict(self, model, predict_features, y_past):
-        """
-        Parameters
-        ----------
-        model: BaseRegressor
-            Instance model of tsforest.forest module.
-        predict_features: pandas.DataFrame
-            Datafame containing the features for the prediction period.
-        y_past: np.ndarray
-            Array with the values of 'y' previous to the prediction period.
-        """
-        y = y_past.tolist()
-        for idx in predict_features.index:
-            if len(self.lags) > 0:
-                for lag in self.lags:
-                    predict_features.loc[idx, f"lag_{lag}"] = y[-lag]
-            if len(self.window_sizes) > 0 & len(self.window_functions) > 0:
-                for window_func in self.window_functions:
-                    for window in self.window_sizes:
-                        predict_features.loc[idx, f"{window_func}_{window}"] = getattr(np, window_func)(y[-window:])
-            y_pred = model.predict(predict_features.loc[[idx], self.input_features])
-            y.append(y_pred)
-        n_predictions = predict_features.shape[0]
-        return np.asarray(y[-n_predictions:])
+    def recursive_predict(self, predict_features):
+        train_temp = self.train_data.loc[:, self.ts_uid_columns+["ds","y"]].copy(deep=True)
 
-    def evaluate(self, eval_data, metric="rmse"):
+        for time_step in np.sort(predict_features.ds.unique()):
+            slice_idx = predict_features.query("ds == @time_step").index
+
+            for lag in self.lags: 
+                lag_values = train_temp.groupby(self.ts_uid_columns)["y"].apply(lambda x: x.iloc[-lag])
+                predict_features.loc[slice_idx, f"lag_{lag}"] = lag_values.values
+            
+            for window_func in self.window_functions:
+                for window in self.window_sizes:
+                    rw_values = (train_temp.groupby(self.ts_uid_columns)["y"]
+                                .apply(lambda x: getattr(np, window_func)(x.iloc[-window:])))
+                    predict_features.loc[slice_idx, f"{window_func}_{window}"] = rw_values.values
+            
+            _prediction = self.model.predict(predict_features.loc[slice_idx,:])
+            _prediction_dataframe = (predict_features.loc[slice_idx, ["ds"]+self.ts_uid_columns]
+                                     .assign(y = _prediction))
+
+            train_temp = pd.concat([train_temp, _prediction_dataframe], axis=0, ignore_index=True)
+
+        prediction_dataframe = pd.merge(predict_features.loc[:, ["ds"]+self.ts_uid_columns], 
+                                        train_temp, 
+                                        how="left", 
+                                        on=["ds"]+self.ts_uid_columns)
+        prediction_dataframe.rename({"y":"y_pred"}, axis=1, inplace=True)
+        return prediction_dataframe 
+
+    def evaluate(self, eval_data, metric="rmse", recursive=False):
         """
         Parameters
         ----------
@@ -487,7 +488,7 @@ class ForecasterBase(object):
         self._validate_evaluate_data(eval_data, metric)
         eval_data = eval_data.copy()
         y_real = eval_data.pop("y")
-        y_pred = self.predict(eval_data)["y_pred"].values
+        y_pred = self.predict(eval_data, recursive)["y_pred"].values
         error_func = getattr(metrics, f"compute_{metric}")
         error = error_func(y_real, y_pred)
         return error
