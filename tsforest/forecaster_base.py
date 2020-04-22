@@ -449,7 +449,7 @@ class ForecasterBase(object):
         min_date = self.train_data.ds.max() - pd.DateOffset(max_offset+1)
         train_temp = (self.train_data
                       .loc[:, self.ts_uid_columns+["ds","y"]]
-                      .query("ds >= @min_date")
+                      .query("ds >= @min_date")
                       .copy(deep=True))
 
         for time_step in np.sort(predict_features.ds.unique()):
