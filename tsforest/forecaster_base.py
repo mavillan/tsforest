@@ -444,11 +444,13 @@ class ForecasterBase(object):
         return prediction_dataframe
 
     def recursive_predict(self, predict_features):
+        ts_uid_in_predict = predict_features.loc[:, self.ts_uid_columns].drop_duplicates()
         max_offset = max(0 if len(self.lags)==0 else max(self.lags), \
                          0 if len(self.window_sizes)==0 else max(self.window_sizes))
-        min_date = self.train_data.ds.max() - pd.DateOffset(max_offset+1)
+        min_date = self.train_data.ds.max() - pd.DateOffset(max_offset)
         train_temp = (self.train_data
                       .loc[:, self.ts_uid_columns+["ds","y"]]
+                      .merge(ts_uid_in_predict, how="inner")
                       .query("ds >= @min_date")
                       .copy(deep=True))
 
