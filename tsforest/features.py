@@ -113,7 +113,7 @@ def compute_predict_features(data, ts_uid_columns, time_features, lags, window_s
                                     columns=column_names)
         all_features_list.append(lag_features)
 
-    if len(window_sizes) > 0 & len(window_functions) > 0:
+    if (len(window_sizes) > 0) & (len(window_functions) > 0):
         column_names = [f"{window_func}_{window}"
                         for window_func in window_functions
                         for window in window_sizes]
