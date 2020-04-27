@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from tsforest.config import (calendar_features_names,
                              calendar_cyclical_features_names)
+from joblib import Parallel, delayed
 
 time_features_mapping = {"year_week":"weekofyear",
                          "year_day":"dayofyear",
@@ -210,7 +211,13 @@ def fill_time_gaps(data, freq="D"):
     filled_data = pd.merge(filled_data, data.drop("y", axis=1), on=["ds"], how="left")
     return filled_data
 
-def compute_lag_features(data, ts_uid_columns, lags):
+def compute_lag(data, ts_uid_columns, lag):
+    feature_name = f"lag_{lag}"
+    feature_value = data.groupby(ts_uid_columns)["y"].shift(lag)
+    feature_value.name = feature_name
+    return feature_value
+
+def compute_lag_features(data, ts_uid_columns, lags, n_jobs=-1):
     """
     data: pandas.Dataframe
         dataframe with column 'y' (response values)
@@ -218,19 +225,27 @@ def compute_lag_features(data, ts_uid_columns, lags):
         List of columns names that are unique identifiers for time series.
     lags: list
         list of integer lag values
+    n_jobs: int
+        Number of parallel jobs used for lag features computation.
     """
     assert "y" in data.columns, "Missing 'y' column in dataframe."
 
-    lag_features = data.loc[:, ["ds","y"]+ts_uid_columns].copy(deep=True)
-    for lag in lags:
-        feature_name = f"lag_{lag}"
-        feature_value = lag_features.groupby(ts_uid_columns)["y"].shift(lag).values
-        lag_features[feature_name] = feature_value 
-    lag_features.drop("y", axis=1, inplace=True)
+    data = data.loc[:, ["ds","y"]+ts_uid_columns].copy(deep=True)
+    with Parallel(n_jobs=n_jobs) as parallel:
+        delayed_func = delayed(compute_lag)
+        lag_features = parallel(delayed_func(data, ts_uid_columns, lag)
+                                for lag in lags)
+    lag_features_dataframe = pd.concat([data.loc[:, ["ds"]+ts_uid_columns]] + lag_features, axis=1)
+    return lag_features_dataframe
 
-    return lag_features
+def compute_rw(data, ts_uid_columns, window, window_func):
+    feature_name = f"{window_func}_{window}"
+    feature_value = getattr(data.groupby(ts_uid_columns)["y"].rolling(window), window_func).__call__()
+    feature_value.reset_index(level=0, drop=True, inplace=True)
+    feature_value.name = feature_name
+    return feature_value
 
-def compute_rw_features(data, ts_uid_columns, window_sizes, window_functions):
+def compute_rw_features(data, ts_uid_columns, window_sizes, window_functions, n_jobs=-1):
     """
     data: pandas.Dataframe
         dataframe with column 'y' (response values)
@@ -240,17 +255,18 @@ def compute_rw_features(data, ts_uid_columns, window_sizes, window_functions):
         list of integer window sizes values
     window_functions: list
         list of string names of the window functions
+    n_jobs: int
+        Number of parallel jobs used for rolling window features computation.
     """
     assert "y" in data.columns, "Missing 'y' column in dataframe"
     # assert window functions in availabe funcs...
 
-    rw_features = data.loc[:, ["ds","y"]+ts_uid_columns].copy(deep=True)
-    rw_features["y"] = rw_features.groupby(ts_uid_columns)["y"].shift(1)
-    for window_func in window_functions:
-        for window in window_sizes:
-            feature_name = f"{window_func}_{window}"
-            feature_value = getattr(rw_features.groupby(ts_uid_columns)["y"].rolling(window), window_func).__call__().values
-            rw_features[feature_name] = feature_value
-    rw_features.drop("y", axis=1, inplace=True)
-
-    return rw_features
+    data = data.loc[:, ["ds","y"]+ts_uid_columns].copy(deep=True)
+    data["y"] = data.groupby(ts_uid_columns)["y"].shift(1)
+    with Parallel(n_jobs=n_jobs) as parallel:
+        delayed_func = delayed(compute_rw)
+        rw_features = parallel(delayed_func(data, ts_uid_columns, window, window_func)
+                               for window_func in window_functions
+                               for window in window_sizes)
+    rw_features_dataframe = pd.concat([data.loc[:, ["ds"]+ts_uid_columns]] + rw_features, axis=1)
+    return rw_features_dataframe
