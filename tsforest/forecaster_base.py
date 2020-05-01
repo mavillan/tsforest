@@ -51,6 +51,8 @@ class ForecasterBase(object):
         value, a trained sklearn.base.TransformerMixin object.
     lags: list
         List of integer lag values to include as features.
+    window_shifts: list
+        List of integer window shift values.
     window_sizes: list
         List of integer window sizes values to include as features.
     window_functions: list
@@ -61,8 +63,8 @@ class ForecasterBase(object):
     """
     def __init__(self, model_params=dict(), time_features=[], exclude_features=[], 
                  categorical_features=dict(), calendar_anomaly=list(), ts_uid_columns=list(), 
-                 trend_models=dict(), target_scalers=dict(), lags=list(), window_sizes=list(), 
-                 window_functions=list(), copy=False):
+                 trend_models=dict(), target_scalers=dict(), lags=list(), window_shifts=[1], 
+                 window_sizes=list(), window_functions=list(), copy=False):
         self.model = None
         self.model_params = model_params
         self.time_features = time_features
@@ -77,6 +79,7 @@ class ForecasterBase(object):
         self.trend_models = trend_models
         self.target_scalers = target_scalers
         self.lags = lags
+        self.window_shifts = window_shifts
         self.window_sizes = window_sizes
         self.window_functions = window_functions
         self.copy = copy
@@ -135,6 +138,14 @@ class ForecasterBase(object):
                 raise ValueError("Values in 'lags' should be integers.")
             elif any([x<1 for x in self.lags]):
                 raise ValueError("Values in 'lags' should be integers greater or equal to 1.")
+
+        if not isinstance(self.window_shifts, list):
+            raise TypeError("Parameter 'window_shifts' should be of type 'list'.")
+        else:
+            if any([type(x)!=int for x in self.window_shifts]):
+                raise ValueError("Values in 'window_shifts' should be integers.")
+            elif any([x<1 for x in self.window_shifts]):
+                raise ValueError("Values in 'window_shifts' should be integers greater or equal to 1.")
         
         if not isinstance(self.window_sizes, list):
             raise TypeError("Parameter 'window_sizes' should be of type 'list'.")
@@ -223,6 +234,7 @@ class ForecasterBase(object):
                                                     ts_uid_columns=self.ts_uid_columns,
                                                     time_features=self.time_features,
                                                     lags=self.lags,
+                                                    window_shifts=self.window_shifts,
                                                     window_sizes=self.window_sizes,
                                                     window_functions=self.window_functions,
                                                     ignore_const_cols=False)
@@ -285,6 +297,7 @@ class ForecasterBase(object):
                                                 ts_uid_columns=self.ts_uid_columns,
                                                 time_features=self.time_features,
                                                 lags=self.lags,
+                                                window_shifts=self.window_shifts,
                                                 window_sizes=self.window_sizes,
                                                 window_functions=self.window_functions,
                                                 ignore_const_cols=True)
@@ -459,13 +472,17 @@ class ForecasterBase(object):
 
             for lag in self.lags: 
                 lag_values = train_temp.groupby(self.ts_uid_columns)["y"].apply(lambda x: x.iloc[-lag])
-                predict_features.loc[slice_idx, f"lag_{lag}"] = lag_values.values
+                predict_features.loc[slice_idx, f"lag{lag}"] = lag_values.values
             
-            for window_func in self.window_functions:
-                for window in self.window_sizes:
-                    rw_values = (train_temp.groupby(self.ts_uid_columns)["y"]
-                                .apply(lambda x: getattr(np, window_func)(x.iloc[-window:])))
-                    predict_features.loc[slice_idx, f"{window_func}_{window}"] = rw_values.values
+            for window_shift in self.window_shifts:
+                for window_func in self.window_functions:
+                    for window in self.window_sizes:
+                        lidx = -(window + window_shift-1)
+                        ridx = -(window_shift-1) if window_shift > 1 else None
+                        rw_values = (train_temp.groupby(self.ts_uid_columns)["y"]
+                                     .apply(lambda x: getattr(np, window_func)(x.iloc[lidx:ridx])))
+                        feature_name = f"{window_func}{window}_shift{window_shift}"
+                        predict_features.loc[slice_idx, feature_name] = rw_values.values
             
             _prediction = self.model.predict(predict_features.loc[slice_idx,:])
             _prediction_dataframe = (predict_features.loc[slice_idx, ["ds"]+self.ts_uid_columns]
