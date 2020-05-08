@@ -309,7 +309,7 @@ class ForecasterBase(object):
             Array with indexes from train_data to be used for validation.
         """
         self._validate_input_data(train_data, valid_index)
-        self.raw_train_columns = train_data.columns
+        self.raw_train_columns = list(train_data.columns)
         if self.copy:
             train_data = train_data.copy(deep=True)
         if len(self.ts_uid_columns) == 0:
