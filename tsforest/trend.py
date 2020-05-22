@@ -6,7 +6,7 @@ from stldecompose.forecast_funcs import (naive,
                                          drift, 
                                          mean, 
                                          seasonal_naive)
-from tsforest.config import prophet_kwargs, stl_kwargs
+from tsforest.config import default_prophet_kwargs, default_stl_kwargs
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
@@ -124,7 +124,7 @@ class TrendModel():
     def __init__(self, backend="prophet"):
         self.backend = backend
 
-    def fit(self, data, model_kwargs=dict()):
+    def fit(self, data, model_kwargs):
         """
         Parameters
         ----------
@@ -132,8 +132,10 @@ class TrendModel():
             Dataframe with columns 'ds' and 'y'.
         """
         if self.backend == "prophet":
+            prophet_kwargs ={**default_prophet_kwargs, **model_kwargs}
             trend_model = fit_prophet_model(data, prophet_kwargs)
         elif self.backend == "stl":
+            stl_kwargs = {**default_stl_kwargs, **model_kwargs}
             trend_model = fit_stl_model(data, stl_kwargs)
         self.trend_model = trend_model
 
@@ -151,17 +153,17 @@ class TrendModel():
             trend_dataframe = compute_stl_trend(self.trend_model, predict_dataframe=predict_period) 
         return trend_dataframe
 
-
-def compute_trend_model(train_data_chunk, key):
-    if train_data_chunk.shape[0] >= 365:
+def compute_trend_model(train_data_chunk, key, backend, model_kwargs):
+    if (backend == "prophet") or (backend is None and train_data_chunk.shape[0] >= 365):
         trend_model = TrendModel(backend="prophet")
-        trend_model.fit(data=train_data_chunk.loc[:, ["ds", "y"]])
-    else:
+        trend_model.fit(train_data_chunk.loc[:, ["ds", "y"]], model_kwargs)
+    elif (backend == "stl") or (backend is None and train_data_chunk.shape[0] < 365):
         trend_model = TrendModel(backend="stl")
-        trend_model.fit(data=train_data_chunk.loc[:, ["ds", "y"]])
+        trend_model.fit(train_data_chunk.loc[:, ["ds", "y"]], model_kwargs)
     return {key:trend_model}
 
-def compute_trend_models(data, valid_index=pd.Index([]), ts_uid_columns=None, n_jobs=-1):
+def compute_trend_models(data, valid_index=pd.Index([]), ts_uid_columns=None, 
+                         backend="prophet", model_kwargs=dict(), n_jobs=-1):
     train_data = data.drop(valid_index, axis=0)
     if ts_uid_columns is None:
         train_data["ts_uid"] = 0
@@ -178,7 +180,7 @@ def compute_trend_models(data, valid_index=pd.Index([]), ts_uid_columns=None, n_
     with Parallel(n_jobs=n_jobs) as parallel:
         delayed_func = delayed(compute_trend_model)
         with tqdm(train_data_split) as tqdm_train_data_split:
-            trend_models = parallel(delayed_func(*data_chunk)
+            trend_models = parallel(delayed_func(*data_chunk, backend, model_kwargs)
                                     for data_chunk in tqdm_train_data_split)
         tqdm_train_data_split.close()
 

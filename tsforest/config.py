@@ -48,7 +48,7 @@ xgb_parameters = {
 }
 
 # fbprophet default parameters 
-prophet_kwargs = {
+default_prophet_kwargs = {
     "n_changepoints":120,
     "changepoint_range":0.9,
     "changepoint_prior_scale":0.05,
@@ -60,7 +60,7 @@ prophet_kwargs = {
 } 
 
 # stl default parameters 
-stl_kwargs = {
+default_stl_kwargs = {
     "period": 7
 } 
 
