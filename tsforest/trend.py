@@ -2,10 +2,7 @@ import numpy as np
 import pandas as pd
 from fbprophet import Prophet
 from stldecompose import decompose, forecast
-from stldecompose.forecast_funcs import (naive,
-                                         drift, 
-                                         mean, 
-                                         seasonal_naive)
+from stldecompose.forecast_funcs import naive, drift, mean, seasonal_naive
 from tsforest.config import default_prophet_kwargs, default_stl_kwargs
 from joblib import Parallel, delayed
 from tqdm import tqdm

@@ -396,7 +396,7 @@ class ForecasterBase(object):
         self.model.fit(**kwargs)
         self.best_iteration = self.model.best_iteration
 
-    def predict(self, predict_data, recursive=False):
+    def predict(self, predict_data, recursive=False, return_trend=False):
         """
         Parameters
         ----------
@@ -404,8 +404,11 @@ class ForecasterBase(object):
             Datafame containing the features for the prediction period.
             Contains the same columns as 'train_data' except for 'y'.
         recursive: boolean
-            If True, perform recursive one-step-ahead predicion for the
+            If True, performs recursive one-step-ahead predicion for the
             lag and/or rolling window features.
+        return_trend: boolean
+            If True, the returning dataframe will contain the trend 
+            estimation for each time series.
         Returns
         ----------
         prediction_dataframe: pandas.DataFrame
@@ -431,8 +434,9 @@ class ForecasterBase(object):
                                             _prediction_dataframe, 
                                             how="left", on=["ds"]+self.ts_uid_columns)
         
-        if (len(self.trend_models) > 0 or
-            len(self.target_scalers) > 0):
+        if len(self.trend_models) > 0 or len(self.target_scalers) > 0:
+            if len(self.trend_models) > 0 and return_trend:
+                prediction_dataframe["trend"] = None
             ts_uid_values = prediction_dataframe.loc[:, self.ts_uid_columns].drop_duplicates()
             for _,row in ts_uid_values.iterrows():
                 key = tuple([item for _,item in row.iteritems()])
@@ -447,11 +451,16 @@ class ForecasterBase(object):
                 if len(self.trend_models) > 0:
                     trend_model = self.trend_models[key]
                     trend_dataframe = trend_model.predict(prediction_dataframe.loc[slice_idx, ["ds"]])
+                    if return_trend:
+                        prediction_dataframe.loc[slice_idx, "trend"] = trend_dataframe.trend.values
                     prediction_dataframe.loc[slice_idx, "y_pred"] += trend_dataframe.trend.values
 
         if "zero_response" in predict_features.columns:
             zero_response_idx = predict_features.query("zero_response == 1").index
             prediction_dataframe.loc[zero_response_idx, "y_pred"] = 0
+
+        if "_internal_ts_uid" in prediction_dataframe.columns:
+            prediction_dataframe.drop("_internal_ts_uid", axis=1, inplace=True)
 
         self.predict_features = predict_features
         return prediction_dataframe
