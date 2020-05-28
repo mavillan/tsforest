@@ -396,7 +396,7 @@ class ForecasterBase(object):
         self.model.fit(**kwargs)
         self.best_iteration = self.model.best_iteration
 
-    def predict(self, predict_data, recursive=False, return_trend=False):
+    def predict(self, predict_data, recursive=False, return_trend=False, bias_corr_func=None):
         """
         Parameters
         ----------
@@ -409,6 +409,10 @@ class ForecasterBase(object):
         return_trend: boolean
             If True, the returning dataframe will contain the trend 
             estimation for each time series.
+        bias_corr_func: function
+            Function to perform bias correction on recursive prediction. 
+            It receives a 1-dimensional array 'x' an return an 1-dimensional 
+            array of the same lenght. 
         Returns
         ----------
         prediction_dataframe: pandas.DataFrame
@@ -429,7 +433,7 @@ class ForecasterBase(object):
                                     .assign(y_pred = prediction))
         else:
             predict_features.sort_values(self.ts_uid_columns+["ds"], axis=0, inplace=True)
-            _prediction_dataframe = self.recursive_predict(predict_features)
+            _prediction_dataframe = self.recursive_predict(predict_features, bias_corr_func)
             prediction_dataframe = pd.merge(predict_data.loc[:, ["ds"]+self.ts_uid_columns],
                                             _prediction_dataframe, 
                                             how="left", on=["ds"]+self.ts_uid_columns)
@@ -465,7 +469,7 @@ class ForecasterBase(object):
         self.predict_features = predict_features
         return prediction_dataframe
 
-    def recursive_predict(self, predict_features):
+    def recursive_predict(self, predict_features, bias_corr_func):
         ts_uid_in_predict = predict_features.loc[:, self.ts_uid_columns].drop_duplicates()
         max_offset = max(0 if len(self.lags)==0 else max(self.lags), \
                          0 if len(self.window_sizes)==0 else max(self.window_sizes))
@@ -494,6 +498,8 @@ class ForecasterBase(object):
                         predict_features.loc[slice_idx, feature_name] = rw_values.values
             
             _prediction = self.model.predict(predict_features.loc[slice_idx,:])
+            if bias_corr_func is not None: 
+                _prediction = bias_corr_func(_prediction)
             _prediction_dataframe = (predict_features.loc[slice_idx, ["ds"]+self.ts_uid_columns]
                                      .assign(y = _prediction))
 
