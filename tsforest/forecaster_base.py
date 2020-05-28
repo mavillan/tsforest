@@ -424,6 +424,13 @@ class ForecasterBase(object):
         if set(self.ts_uid_columns) == {"_internal_ts_uid"}:
             # adds a dummy '_internal_ts_uid' column in case of single ts data
             predict_data["_internal_ts_uid"] = 0
+        
+        ts_uid_in_predict = predict_data.loc[:, self.ts_uid_columns].drop_duplicates()
+        ts_uid_in_train = self.train_data.loc[:, self.ts_uid_columns].drop_duplicates()
+        missing_ts_uid = (pd.merge(ts_uid_in_predict, ts_uid_in_train, how="left", indicator=True)
+                          .query("_merge == 'left_only'"))
+        assert len(missing_ts_uid) == 0, \
+            "There are ts_uid values in 'predict_features' not present in training data."
 
         predict_features = self._prepare_predict_features(predict_data)
         if not recursive:
@@ -470,14 +477,23 @@ class ForecasterBase(object):
         return prediction_dataframe
 
     def recursive_predict(self, predict_features, bias_corr_func):
+        min_predict_time = predict_features.ds.min()
+        max_train_time = self.train_data.ds.max()
+        time_freq = (self.train_data.loc[:, ["ds"]]
+                     .drop_duplicates()
+                     .sort_values("ds")
+                     .ds.diff(1).median())
+        assert (min_predict_time - max_train_time) <= time_freq, \
+            "predict time period cannot have time gaps from last time-step in training data."
+
         ts_uid_in_predict = predict_features.loc[:, self.ts_uid_columns].drop_duplicates()
         max_offset = max(0 if len(self.lags)==0 else max(self.lags), \
                          0 if len(self.window_sizes)==0 else max(self.window_sizes))
-        min_date = self.train_data.ds.max() - pd.DateOffset(max_offset)
+        max_offset_time = self.train_data.ds.max() - pd.DateOffset(max_offset)
         train_temp = (self.train_data
                       .loc[:, self.ts_uid_columns+["ds","y"]]
                       .merge(ts_uid_in_predict, how="inner")
-                      .query("ds >= @min_date")
+                      .query("@max_offset_time <= ds < @min_predict_time")
                       .copy(deep=True))
 
         for time_step in np.sort(predict_features.ds.unique()):
