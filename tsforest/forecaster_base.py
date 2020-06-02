@@ -488,8 +488,8 @@ class ForecasterBase(object):
 
         ts_uid_in_predict = predict_features.loc[:, self.ts_uid_columns].drop_duplicates()
         max_offset = max(0 if len(self.lags)==0 else max(self.lags), \
-                         0 if len(self.window_sizes)==0 else max(self.window_sizes))
-        max_offset_time = self.train_data.ds.max() - pd.DateOffset(max_offset)
+                         0 if len(self.window_sizes)==0 else max(self.window_sizes)+max(self.window_shifts))
+        max_offset_time = min_predict_time - pd.DateOffset(max_offset+1)
         train_temp = (self.train_data
                       .loc[:, self.ts_uid_columns+["ds","y"]]
                       .merge(ts_uid_in_predict, how="inner")
