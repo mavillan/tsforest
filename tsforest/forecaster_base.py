@@ -495,27 +495,25 @@ class ForecasterBase(object):
                       .merge(ts_uid_in_predict, how="inner")
                       .query("@max_offset_time <= ds < @min_predict_time")
                       .copy(deep=True))
-
         # todo: raise warning for missing ts_uid
-        predict_features = predict_features.copy(deep=True)
-        predict_features.sort_values(["ds"] + self.ts_uid_columns, axis=0, inplace=True)
-        predict_features.set_index(["ds"] + self.ts_uid_columns, drop=False, inplace=True)
 
-        for time_step in np.sort(predict_features.ds.unique()):
+        with pd.option_context('mode.chained_assignment', None):
+            predict_features.sort_values(["ds"] + self.ts_uid_columns, axis=0, inplace=True)
+            predict_features.set_index(["ds"] + self.ts_uid_columns, drop=False, inplace=True)
 
-            for lag in self.lags: 
-                lag_values = train_temp.groupby(self.ts_uid_columns)["y"].apply(lambda x: x.iloc[-lag])
-                predict_features.loc[time_step].loc[lag_values.index, f"lag{lag}"] = lag_values.values
-            
-            for window_shift in self.window_shifts:
-                for window_func in self.window_functions:
-                    for window in self.window_sizes:
-                        lidx = -(window + window_shift-1)
-                        ridx = -(window_shift-1) if window_shift > 1 else None
-                        rw_values = (train_temp.groupby(self.ts_uid_columns)["y"]
-                                     .apply(lambda x: getattr(np, window_func)(x.iloc[lidx:ridx])))
-                        feature_name = f"{window_func}{window}_shift{window_shift}"
-                        predict_features.loc[time_step].loc[rw_values.index, feature_name] = rw_values.values
+            for time_step in np.sort(predict_features.ds.unique()):
+                for lag in self.lags:
+                    lag_values = train_temp.groupby(self.ts_uid_columns)["y"].apply(lambda x: x.iloc[-lag])
+                    predict_features.loc[time_step].loc[lag_values.index, f"lag{lag}"] = lag_values.values
+                for window_shift in self.window_shifts:
+                    for window_func in self.window_functions:
+                        for window in self.window_sizes:
+                            lidx = -(window + window_shift-1)
+                            ridx = -(window_shift-1) if window_shift > 1 else None
+                            rw_values = (train_temp.groupby(self.ts_uid_columns)["y"]
+                                        .apply(lambda x: getattr(np, window_func)(x.iloc[lidx:ridx])))
+                            feature_name = f"{window_func}{window}_shift{window_shift}"
+                            predict_features.loc[time_step].loc[rw_values.index, feature_name] = rw_values.values
             
             _prediction = self.model.predict(predict_features.loc[time_step])
             if bias_corr_func is not None: 
