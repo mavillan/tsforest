@@ -439,7 +439,6 @@ class ForecasterBase(object):
                                     .loc[:, ["ds"]+self.ts_uid_columns]
                                     .assign(y_pred = prediction))
         else:
-            predict_features.sort_values(self.ts_uid_columns+["ds"], axis=0, inplace=True)
             _prediction_dataframe = self.recursive_predict(predict_features, bias_corr_func)
             prediction_dataframe = pd.merge(predict_data.loc[:, ["ds"]+self.ts_uid_columns],
                                             _prediction_dataframe, 
@@ -478,6 +477,7 @@ class ForecasterBase(object):
 
     def recursive_predict(self, predict_features, bias_corr_func):
         min_predict_time = predict_features.ds.min()
+        max_predict_time = predict_features.ds.max()
         max_train_time = self.train_data.ds.max()
         time_freq = (self.train_data.loc[:, ["ds"]]
                      .drop_duplicates()
@@ -496,12 +496,15 @@ class ForecasterBase(object):
                       .query("@max_offset_time <= ds < @min_predict_time")
                       .copy(deep=True))
 
+        # todo: raise warning for missing ts_uid
+        predict_features.sort_values(["ds"] + self.ts_uid_columns, axis=0, inplace=True)
+        predict_features.set_index(["ds"] + self.ts_uid_columns, drop=False, inplace=True)
+
         for time_step in np.sort(predict_features.ds.unique()):
-            slice_idx = predict_features.query("ds == @time_step").index
 
             for lag in self.lags: 
                 lag_values = train_temp.groupby(self.ts_uid_columns)["y"].apply(lambda x: x.iloc[-lag])
-                predict_features.loc[slice_idx, f"lag{lag}"] = lag_values.values
+                predict_features.loc[time_step].loc[lag_values.index, f"lag{lag}"] = lag_values.values
             
             for window_shift in self.window_shifts:
                 for window_func in self.window_functions:
@@ -511,20 +514,17 @@ class ForecasterBase(object):
                         rw_values = (train_temp.groupby(self.ts_uid_columns)["y"]
                                      .apply(lambda x: getattr(np, window_func)(x.iloc[lidx:ridx])))
                         feature_name = f"{window_func}{window}_shift{window_shift}"
-                        predict_features.loc[slice_idx, feature_name] = rw_values.values
+                        predict_features.loc[time_step].loc[rw_values.index, feature_name] = rw_values.values
             
-            _prediction = self.model.predict(predict_features.loc[slice_idx,:])
+            _prediction = self.model.predict(predict_features.loc[time_step])
             if bias_corr_func is not None: 
                 _prediction = bias_corr_func(_prediction)
-            _prediction_dataframe = (predict_features.loc[slice_idx, ["ds"]+self.ts_uid_columns]
-                                     .assign(y = _prediction))
 
+            _prediction_dataframe = predict_features.loc[time_step, ["ds"]+self.ts_uid_columns].reset_index(drop=True)
+            _prediction_dataframe["y"] = _prediction
             train_temp = pd.concat([train_temp, _prediction_dataframe], axis=0, ignore_index=True)
 
-        prediction_dataframe = pd.merge(predict_features.loc[:, ["ds"]+self.ts_uid_columns], 
-                                        train_temp, 
-                                        how="left", 
-                                        on=["ds"]+self.ts_uid_columns)
+        prediction_dataframe = train_temp.query("@min_predict_time <= ds <= @max_predict_time")
         prediction_dataframe.rename({"y":"y_pred"}, axis=1, inplace=True)
         return prediction_dataframe 
 
