@@ -497,6 +497,7 @@ class ForecasterBase(object):
                       .copy(deep=True))
 
         # todo: raise warning for missing ts_uid
+        predict_features = predict_features.copy(deep=True)
         predict_features.sort_values(["ds"] + self.ts_uid_columns, axis=0, inplace=True)
         predict_features.set_index(["ds"] + self.ts_uid_columns, drop=False, inplace=True)
 
