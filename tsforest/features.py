@@ -287,7 +287,7 @@ def compute_lagged_feature(grouped, lag=None, window_shift=None, window_func=Non
     elif is_rw_feature and not is_lag_feature:
         lidx = -(window_size + window_shift-1)
         ridx = -(window_shift-1) if window_shift > 1 else None
-        feature_values = grouped.apply(lambda x: getattr(np, window_func)(x.iloc[lidx:ridx]))
+        feature_values = grouped.apply(lambda x: getattr(x.iloc[lidx:ridx], window_func)())
         feature_values.name = f"{window_func}{window_size}_shift{window_shift}"
     else:
         raise ValueError("Invalid input parameters.")
