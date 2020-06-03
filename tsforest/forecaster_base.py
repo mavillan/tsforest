@@ -1,14 +1,19 @@
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 import category_encoders as ce
 from inspect import getmembers, isfunction
 from tsforest import metrics
 from tsforest.trend import TrendModel
 from tsforest.features import (compute_train_features, 
-                               compute_predict_features)
+                               compute_predict_features,
+                               compute_lagged_feature)
 from tsforest.config import (calendar_features_names,
                              calendar_cyclical_features_names)
 from sklearn.base import TransformerMixin
+
+# disables pandas SettingWithCopyWarning
+pd.set_option('mode.chained_assignment', None)
 
 # available time feature
 AVAILABLE_TIME_FEATURES = ["year", "quarter", "month", "days_in_month",
@@ -57,6 +62,8 @@ class ForecasterBase(object):
         List of integer window sizes values to include as features.
     window_functions: list
         List of string names of the window functions to include as features.
+    n_jobs: int
+        Number of jobs to run in parallel.
     copy: bool
         If True performs a copy over the dataframes provided, if False performs
         inplace operations.
@@ -64,7 +71,7 @@ class ForecasterBase(object):
     def __init__(self, model_params=dict(), time_features=[], exclude_features=[], 
                  categorical_features=dict(), calendar_anomaly=list(), ts_uid_columns=list(), 
                  trend_models=dict(), target_scalers=dict(), lags=list(), window_shifts=[1], 
-                 window_sizes=list(), window_functions=list(), copy=False):
+                 window_sizes=list(), window_functions=list(), n_jobs=-1, copy=False):
         self.model = None
         self.model_params = model_params
         self.time_features = time_features
@@ -82,6 +89,7 @@ class ForecasterBase(object):
         self.window_shifts = window_shifts
         self.window_sizes = window_sizes
         self.window_functions = window_functions
+        self.n_jobs = n_jobs
         self.copy = copy
         self._features_already_prepared = False
         self._validate_inputs()
@@ -474,7 +482,7 @@ class ForecasterBase(object):
 
         self.predict_features = predict_features
         return prediction_dataframe
-
+                
     def recursive_predict(self, predict_features, bias_corr_func):
         min_predict_time = predict_features.ds.min()
         max_predict_time = predict_features.ds.max()
@@ -496,33 +504,35 @@ class ForecasterBase(object):
                       .query("@max_offset_time <= ds < @min_predict_time")
                       .copy(deep=True))
         # todo: raise warning for missing ts_uid
-
-        with pd.option_context('mode.chained_assignment', None):
-            predict_features.sort_values(["ds"] + self.ts_uid_columns, axis=0, inplace=True)
-            predict_features.set_index(["ds"] + self.ts_uid_columns, drop=False, inplace=True)
+           
+        predict_features.sort_values(["ds"] + self.ts_uid_columns, axis=0, inplace=True)
+        predict_features.set_index(["ds"] + self.ts_uid_columns, drop=False, inplace=True)
+        
+        with Parallel(n_jobs=self.n_jobs) as parallel:
+            delayed_func = delayed(compute_lagged_feature)
 
             for time_step in np.sort(predict_features.ds.unique()):
-                for lag in self.lags:
-                    lag_values = train_temp.groupby(self.ts_uid_columns)["y"].apply(lambda x: x.iloc[-lag])
-                    predict_features.loc[time_step].loc[lag_values.index, f"lag{lag}"] = lag_values.values
-                for window_shift in self.window_shifts:
-                    for window_func in self.window_functions:
-                        for window in self.window_sizes:
-                            lidx = -(window + window_shift-1)
-                            ridx = -(window_shift-1) if window_shift > 1 else None
-                            rw_values = (train_temp.groupby(self.ts_uid_columns)["y"]
-                                        .apply(lambda x: getattr(np, window_func)(x.iloc[lidx:ridx])))
-                            feature_name = f"{window_func}{window}_shift{window_shift}"
-                            predict_features.loc[time_step].loc[rw_values.index, feature_name] = rw_values.values
-            
-            _prediction = self.model.predict(predict_features.loc[time_step])
-            if bias_corr_func is not None: 
-                _prediction = bias_corr_func(_prediction)
+                lag_kwargs = [{"lag":lag} for lag in self.lags]   
+                rw_kwargs =  [{"window_shift":window_shift, "window_func":window_func, "window_size":window_size}
+                              for window_shift in self.window_shifts
+                              for window_func in self.window_functions
+                              for window_size in self.window_sizes]
+                input_kwargs = lag_kwargs + rw_kwargs
 
-            _prediction_dataframe = predict_features.loc[time_step, ["ds"]+self.ts_uid_columns].reset_index(drop=True)
-            _prediction_dataframe["y"] = _prediction
-            train_temp = pd.concat([train_temp, _prediction_dataframe], axis=0, ignore_index=True)
+                grouped = train_temp.groupby(self.ts_uid_columns)["y"]
+                lagged_features = parallel(delayed_func(grouped, **kwargs) for kwargs in input_kwargs)    
+                for lagged_feature in lagged_features:
+                    predict_features.loc[time_step].loc[lagged_feature.index, lagged_feature.name] = lagged_feature.values
 
+                _prediction = self.model.predict(predict_features.loc[time_step])
+                if bias_corr_func is not None: 
+                    _prediction = bias_corr_func(_prediction)
+                _prediction_dataframe = (predict_features
+                                         .loc[time_step, ["ds"]+self.ts_uid_columns]
+                                         .assign(y = _prediction))
+                train_temp = pd.concat([train_temp, _prediction_dataframe], axis=0, ignore_index=True)
+
+        predict_features.reset_index(drop=True, inplace=True)
         prediction_dataframe = train_temp.query("@min_predict_time <= ds <= @max_predict_time")
         prediction_dataframe.rename({"y":"y_pred"}, axis=1, inplace=True)
         return prediction_dataframe 

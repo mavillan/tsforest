@@ -264,3 +264,32 @@ def compute_rw_features(data, ts_uid_columns, window_shifts, window_sizes, windo
     rw_features.drop(["y","ys"], axis=1, inplace=True)
 
     return rw_features
+
+def compute_lagged_feature(grouped, lag=None, window_shift=None, window_func=None, window_size=None):
+    """
+    grouped: pandas.core.groupby.generic.SeriesGroupBy
+        Groupby object containing the response variable "y"
+        grouped by ts_uid_columns.
+    lag: int
+        integer lag value.
+    window_shift: int
+        integer window shift value.
+    window_func: string
+        string names of the window function.
+    window_size: int
+        integer window sizes value.
+    """
+    is_lag_feature = lag is not None
+    is_rw_feature = (window_shift is not None) and (window_func is not None) and (window_size is not None)
+    if is_lag_feature and not is_rw_feature:
+        feature_values = grouped.apply(lambda x: x.iloc[-lag])
+        feature_values.name = f"lag{lag}"
+    elif is_rw_feature and not is_lag_feature:
+        lidx = -(window_size + window_shift-1)
+        ridx = -(window_shift-1) if window_shift > 1 else None
+        feature_values = grouped.apply(lambda x: getattr(np, window_func)(x.iloc[lidx:ridx]))
+        feature_values.name = f"{window_func}{window_size}_shift{window_shift}"
+    else:
+        raise ValueError("Invalid input parameters.")
+        
+    return feature_values
