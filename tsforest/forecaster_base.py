@@ -522,7 +522,7 @@ class ForecasterBase(object):
                 grouped = train_temp.groupby(self.ts_uid_columns)["y"]
                 lagged_features = parallel(delayed_func(grouped, **kwargs) for kwargs in input_kwargs)    
                 for lagged_feature in lagged_features:
-                    predict_features.loc[time_step].loc[lagged_feature.index, lagged_feature.name] = lagged_feature.values
+                    predict_features.loc[time_step, lagged_feature.name].loc[lagged_feature.index] = lagged_feature.values
 
                 _prediction = self.model.predict(predict_features.loc[time_step])
                 if bias_corr_func is not None: 
