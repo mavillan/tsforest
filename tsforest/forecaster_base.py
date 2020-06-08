@@ -360,7 +360,7 @@ class ForecasterBase(object):
                     if feature in self.ts_uid_columns:
                         valid_features["_"+feature] = transformed.values
                     else:
-                        del train_features[feature]
+                        del valid_features[feature]
                         valid_features[feature] = transformed.values
             self.categorical_encoders = categorical_encoders
         else:
