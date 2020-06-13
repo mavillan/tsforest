@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 import category_encoders as ce
+from sklearn.base import BaseEstimator
 from inspect import getmembers, isfunction
 from tsforest import metrics
 from tsforest.trend import TrendModel
@@ -24,15 +25,12 @@ AVAILABLE_TIME_FEATURES = ["year", "quarter", "month", "days_in_month",
                            "week_day_cos", "week_day_sin", "year_day_cos", "year_day_sin",
                            "year_week_cos", "year_week_sin", "month_cos", "month_sin"]
 
-# available methods in pandas.core.window.Rolling as of pandas 0.25.1 
+# available methods in pandas.core.window.Rolling as of pandas 1.0.4 
 AVAILABLE_RW_FUNCTIONS = ["count", "sum", "mean", "median", "var", "std", "min", 
                           "max", "corr", "cov", "skew", "kurt", "quantile"]
 
 AVAILABLE_METRICS = [member[0].split('_')[1] for member in getmembers(metrics) 
                      if isfunction(member[1])]
-
-AVAILABLE_ENCODERS = [member[1] for member in getmembers(ce)
-                      if member[0]=="__all__"][0] + ["default"]
 
 class ForecasterBase(object):
     """
@@ -120,8 +118,22 @@ class ForecasterBase(object):
         if not isinstance(self.categorical_features, dict):
             raise TypeError("Parameter 'categorical_features' should be of type 'dict'.")
         else:
-            if any([encoding not in AVAILABLE_ENCODERS for encoding in self.categorical_features.values()]):
-                raise ValueError(f"Values in 'categorical_features' should be any of: {AVAILABLE_ENCODERS}")
+            for encoding in self.categorical_features.values():
+                if isinstance(encoding, str):
+                    if encoding != "default":
+                        raise ValueError(f"Unrecognized value: {encoding} for categorical feature.")
+                elif isinstance(encoding, tuple):
+                    if len(encoding) != 3:
+                        raise ValueError(f"Encoding tuple should by of size 3.")
+                    target,encoder_class,encoder_kwargs = encoding
+                    if not isinstance(target, str):
+                        raise TypeError("Target used for encoding should be of type 'str'.")
+                    if not isinstance(encoder_class, BaseEstimator):
+                        raise TypeError("Encoder class should inherit from 'sklearn.base import BaseEstimator'.")
+                    if not isinstance(encoder_kwargs, dict):
+                        raise TypeError("Encoder kwargs should by of type 'dict'.")
+                else:
+                    raise ValueError(f"Values in 'categorical_features' should be of type 'str' or 'tuple'.")
 
         if not isinstance(self.calendar_anomaly, list):
             raise TypeError("Parameter 'calendar_anomaly' should be of type 'list'.")
@@ -210,18 +222,21 @@ class ForecasterBase(object):
         for feature,encoding in self.categorical_features.items():
             if encoding == "default": 
                 if not np.issubdtype(train_features[feature].dtype, np.number):
-                    encoding = "OrdinalEncoder"
+                    target = None
+                    encoder_class = ce.OrdinalEncoder
+                    encoder_kwargs = dict()
                 else: continue
-            encoder_class = getattr(ce, encoding)
-            encoder = encoder_class(cols=[feature])
-            encoder.fit(train_features.loc[:, [feature]], train_features.loc[:, "y_raw"].values)
+            else: target,encoder_class,encoder_kwargs = encoding
+            encoder = encoder_class(cols=[feature], **encoder_kwargs)
+            if target == "y": target = "y_raw"
+            encoder.fit(train_features.loc[:, [feature]], train_features.loc[:, target].values)
             transformed = encoder.transform(train_features.loc[:, [feature]])
             if feature in self.ts_uid_columns:
                 train_features["_"+feature] = transformed.values
                 self.exclude_features.append(feature)
             else:
                 del train_features[feature]
-                train_features[feature] = transformed.values
+                train_features[transformed.columns] = transformed.values
             categorical_encoders[feature] = encoder
         return train_features,categorical_encoders
     

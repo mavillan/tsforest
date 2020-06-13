@@ -1,6 +1,10 @@
 import h2o
-from tsforest.forest import H2OGBMRegressor, LightGBMRegressor, CatBoostRegressor, XGBoostRegressor
+from tsforest.forest import (H2OGBMRegressor, 
+                             LightGBMRegressor, 
+                             CatBoostRegressor, 
+                             XGBoostRegressor)
 from tsforest.forecaster_base import ForecasterBase
+import category_encoders as ce
 
 class H2OGBMForecaster(ForecasterBase):
     def __init__(self, *args, **kwargs):
@@ -11,7 +15,7 @@ class H2OGBMForecaster(ForecasterBase):
         self.model = H2OGBMRegressor(model_params)
         for feature,encoding in self.categorical_features.items():
             if encoding == "default":
-                self.categorical_features[feature] = "CatBoostEncoder"
+                self.categorical_features[feature] = ("y", ce.TargetEncoder, dict())
 
 class LightGBMForecaster(ForecasterBase):
     def __init__(self, *args, **kwargs):
@@ -29,4 +33,4 @@ class XGBoostForecaster(ForecasterBase):
         self.model = XGBoostRegressor(self.model_params)
         for feature,encoding in self.categorical_features.items():
             if encoding == "default":
-                self.categorical_features[feature] = "CatBoostEncoder"
+                self.categorical_features[feature] = ("y", ce.TargetEncoder, dict())
