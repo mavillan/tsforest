@@ -128,9 +128,9 @@ class ForecasterBase(object):
                     target,encoder_class,encoder_kwargs = encoding
                     if not isinstance(target, str):
                         raise TypeError("Target used for encoding should be of type 'str'.")
-                    if not isinstance(encoder_class, BaseEstimator):
+                    if not issubclass(encoder_class, BaseEstimator):
                         raise TypeError("Encoder class should inherit from 'sklearn.base import BaseEstimator'.")
-                    if not isinstance(encoder_kwargs, dict):
+                    if (encoder_kwargs is not None) and (not isinstance(encoder_kwargs, dict)):
                         raise TypeError("Encoder kwargs should by of type 'dict'.")
                 else:
                     raise ValueError(f"Values in 'categorical_features' should be of type 'str' or 'tuple'.")
@@ -222,13 +222,15 @@ class ForecasterBase(object):
         for feature,encoding in self.categorical_features.items():
             if encoding == "default": 
                 if not np.issubdtype(train_features[feature].dtype, np.number):
-                    target = None
+                    target = "y_raw"
                     encoder_class = ce.OrdinalEncoder
                     encoder_kwargs = dict()
                 else: continue
-            else: target,encoder_class,encoder_kwargs = encoding
+            else: 
+                target,encoder_class,encoder_kwargs = encoding
+                if target == "y": target = "y_raw"
+                if encoder_kwargs is None: encoder_kwargs = dict()
             encoder = encoder_class(cols=[feature], **encoder_kwargs)
-            if target == "y": target = "y_raw"
             encoder.fit(train_features.loc[:, [feature]], train_features.loc[:, target].values)
             transformed = encoder.transform(train_features.loc[:, [feature]])
             if feature in self.ts_uid_columns:
