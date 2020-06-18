@@ -8,7 +8,7 @@ from tsforest import metrics
 from tsforest.trend import TrendModel
 from tsforest.features import (compute_train_features, 
                                compute_predict_features,
-                               compute_lagged_feature)
+                               compute_lagged_predict_feature)
 from tsforest.config import (calendar_features_names,
                              calendar_cyclical_features_names)
 from sklearn.base import TransformerMixin
@@ -325,7 +325,8 @@ class ForecasterBase(object):
                                                 window_shifts=self.window_shifts,
                                                 window_sizes=self.window_sizes,
                                                 window_functions=self.window_functions,
-                                                ignore_const_cols=True)
+                                                ignore_const_cols=True,
+                                                n_jobs=self.n_jobs)
         if "zero_response" in train_features.columns:
             train_features = train_features.query("zero_response != 1")
         if "calendar_anomaly" in train_features.columns:
@@ -361,8 +362,6 @@ class ForecasterBase(object):
         else:
             train_data["y_raw"] = train_data["y"].values
         train_features = self.prepare_train_features(train_data)
-        # needed to keep track of the rows used in valid_index
-        train_features.set_index(train_data.index, inplace=True)
 
         if len(valid_index) > 0:
             valid_features = train_features.loc[valid_index, :]
@@ -526,7 +525,7 @@ class ForecasterBase(object):
         predict_features.set_index(["ds"] + self.ts_uid_columns, drop=False, inplace=True)
         
         with Parallel(n_jobs=self.n_jobs) as parallel:
-            delayed_func = delayed(compute_lagged_feature)
+            delayed_func = delayed(compute_lagged_predict_feature)
 
             for time_step in np.sort(predict_features.ds.unique()):
                 lag_kwargs = [{"lag":lag} for lag in self.lags]   

@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from tsforest.config import (calendar_features_names,
                              calendar_cyclical_features_names)
+from joblib import Parallel, delayed
 
 time_features_mapping = {"year_week":"weekofyear",
                          "year_day":"dayofyear",
@@ -9,7 +10,8 @@ time_features_mapping = {"year_week":"weekofyear",
                          "week_day":"dayofweek"}
 
 def compute_train_features(data, ts_uid_columns, time_features, lags, window_shifts,
-                           window_sizes, window_functions, ignore_const_cols=True):
+                           window_sizes, window_functions, ignore_const_cols=True,
+                           n_jobs=1):
     """
     Parameters
     ----------
@@ -29,6 +31,8 @@ def compute_train_features(data, ts_uid_columns, time_features, lags, window_shi
         List of string names of the window functions to include as features.
     ignore_const_cols: bool
         Specify whether to ignore constant columns.
+    n_jobs: int
+        Number of jobs to run in parallel when computing the lag/rw features.
     Returns
     ----------
     all_features: pd.Dataframe
@@ -36,6 +40,7 @@ def compute_train_features(data, ts_uid_columns, time_features, lags, window_shi
     """
     # list with all the dataframes of features
     all_features_list = list()
+    all_features_list.append(data.reset_index(drop=True))
 
     # generating the time features
     if len(time_features) > 0:
@@ -43,36 +48,25 @@ def compute_train_features(data, ts_uid_columns, time_features, lags, window_shi
                         "time_features":time_features,
                         "ignore_const_cols":ignore_const_cols}
         calendar_features = compute_calendar_features(**input_params)
-        for ts_uid in ts_uid_columns:
-            calendar_features[ts_uid] = data.loc[:, ts_uid].values
-        all_features_list.append(calendar_features.set_index(["ds"]+ts_uid_columns))
+        all_features_list.append(calendar_features)
 
-    # filling time gaps for 'lag' and 'rw' features
-    #if len(lags) > 0 or (len(window_sizes) > 0 & len(window_functions) > 0):
-    #    filled_data = fill_time_gaps(data)
+    lag_kwargs = [{"lag":lag} for lag in lags]  
+    rw_kwargs =  [{"window_shift":window_shift, "window_func":window_func, "window_size":window_size}
+                    for window_shift in window_shifts
+                    for window_func in window_functions
+                    for window_size in window_sizes]
+    input_kwargs = lag_kwargs + rw_kwargs
 
-    if len(lags) > 0:
-        lag_features = (compute_lag_features(data, ts_uid_columns, lags=lags)
-                        .merge(data.loc[:, ["ds"]+ts_uid_columns], 
-                               how="inner", 
-                               on=["ds"]+ts_uid_columns))
-        all_features_list.append(lag_features.set_index(["ds"]+ts_uid_columns))
-
-    if (len(window_sizes) > 0) & (len(window_functions) > 0):
-        rw_features = (compute_rw_features(data, 
-                                           ts_uid_columns,
-                                           window_shifts=window_shifts,
-                                           window_sizes=window_sizes, 
-                                           window_functions=window_functions)
-                        .merge(data.loc[:, ["ds"]+ts_uid_columns], 
-                               how="inner", 
-                               on=["ds"]+ts_uid_columns))
-        all_features_list.append(rw_features.set_index(["ds"]+ts_uid_columns))
+    grouped = data.loc[:, ts_uid_columns+["y"]].groupby(ts_uid_columns)["y"]
+    with Parallel(n_jobs=n_jobs) as parallel:
+        delayed_func = delayed(compute_lagged_train_feature)
+        lagged_features = parallel(delayed_func(grouped, **kwargs) for kwargs in input_kwargs)
+        lagged_features = pd.DataFrame({feature.name:feature.values for feature in lagged_features})
+        all_features_list.append(lagged_features)
 
     # merging all features
-    all_features_list.append(data.set_index(["ds"]+ts_uid_columns))
     all_features = pd.concat(all_features_list, axis=1)
-    all_features.reset_index(inplace=True)
+    all_features.set_index(data.index, inplace=True)
     return all_features
 
 def compute_predict_features(data, ts_uid_columns, time_features, lags, window_shifts,
@@ -103,6 +97,7 @@ def compute_predict_features(data, ts_uid_columns, time_features, lags, window_s
     """
     # list with all the dataframes of features
     all_features_list = list()
+    all_features_list.append(data.reset_index(drop=True))
 
     # generating the time features
     if len(time_features) > 0:
@@ -110,11 +105,11 @@ def compute_predict_features(data, ts_uid_columns, time_features, lags, window_s
                         "time_features":time_features,
                         "ignore_const_cols":ignore_const_cols}
         calendar_features = compute_calendar_features(**input_params)
-        all_features_list.append(calendar_features.set_index(["ds"]))
+        all_features_list.append(calendar_features)
 
     if len(lags) > 0:
         column_names = [f"lag{lag}" for lag in lags]
-        lag_features = pd.DataFrame(np.nan, index=data.ds, 
+        lag_features = pd.DataFrame(np.nan, index=range(len(data)), 
                                     columns=column_names)
         all_features_list.append(lag_features)
 
@@ -123,14 +118,13 @@ def compute_predict_features(data, ts_uid_columns, time_features, lags, window_s
                         for window_shift in window_shifts
                         for window_func in window_functions
                         for window in window_sizes]
-        rw_features = pd.DataFrame(np.nan, index=data.ds,
+        rw_features = pd.DataFrame(np.nan, index=range(len(data)),
                                     columns=column_names)
         all_features_list.append(rw_features)
     
     # merging all features
-    all_features_list.append(data.set_index(["ds"]))
     all_features = pd.concat(all_features_list, axis=1)
-    all_features.reset_index(inplace=True)
+    all_features.set_index(data.index, inplace=True)
     return all_features
 
 def compute_calendar_features(date_range, time_features, ignore_const_cols=True):
@@ -145,7 +139,6 @@ def compute_calendar_features(date_range, time_features, ignore_const_cols=True)
         Specify whether to ignore constant columns.
     """  
     calendar_data = pd.DataFrame()
-    calendar_data["ds"] = date_range
 
     for feature in time_features:
         if feature in time_features_mapping.keys():
@@ -216,56 +209,35 @@ def fill_time_gaps(data, freq="D"):
     filled_data = pd.merge(filled_data, data.drop("y", axis=1), on=["ds"], how="left")
     return filled_data
 
-def compute_lag_features(data, ts_uid_columns, lags):
+def compute_lagged_train_feature(grouped, lag=None, window_shift=None, window_func=None, window_size=None):
     """
-    data: pandas.Dataframe
-        dataframe with column 'y' (response values)
-    ts_uid_columns: list
-        List of columns names that are unique identifiers for time series.
-    lags: list
-        list of integer lag values
+    grouped: pandas.core.groupby.generic.SeriesGroupBy
+        Groupby object containing the response variable "y"
+        grouped by ts_uid_columns.
+    lag: int
+        integer lag value.
+    window_shift: int
+        integer window shift value.
+    window_func: string
+        string names of the window function.
+    window_size: int
+        integer window sizes value.
     """
-    assert "y" in data.columns, "Missing 'y' column in dataframe."
+    is_lag_feature = lag is not None
+    is_rw_feature = (window_shift is not None) and (window_func is not None) and (window_size is not None)
 
-    lag_features = data.loc[:, ["ds","y"]+ts_uid_columns].copy(deep=True)
-    for lag in lags:
-        feature_name = f"lag{lag}"
-        feature_value = lag_features.groupby(ts_uid_columns)["y"].shift(lag).values
-        lag_features[feature_name] = feature_value 
-    lag_features.drop("y", axis=1, inplace=True)
+    if is_lag_feature and not is_rw_feature:
+        feature_values = grouped.shift(lag)
+        feature_values.name = f"lag{lag}"
+    elif is_rw_feature and not is_lag_feature:
+        feature_values = grouped.apply(lambda x: getattr(x.shift(window_shift).rolling(window_size), window_func)())
+        feature_values.name = f"{window_func}{window_size}_shift{window_shift}"
+    else:
+        raise ValueError("Invalid input parameters.")
 
-    return lag_features
+    return feature_values
 
-def compute_rw_features(data, ts_uid_columns, window_shifts, window_sizes, window_functions):
-    """
-    data: pandas.Dataframe
-        dataframe with column 'y' (response values)
-    ts_uid_columns: list
-        List of columns names that are unique identifiers for time series.
-    window_shifts: list
-        List of integer window shift values.
-    window_sizes: list
-        list of integer window sizes values
-    window_functions: list
-        list of string names of the window functions
-    """
-    assert "y" in data.columns, "Missing 'y' column in dataframe"
-    # assert window functions in availabe funcs...
-
-    rw_features = data.loc[:, ["ds","y"]+ts_uid_columns].copy(deep=True)
-    for window_shift in window_shifts:
-        rw_features["ys"] = rw_features.groupby(ts_uid_columns)["y"].shift(window_shift)
-        for window_func in window_functions:
-            for window in window_sizes:
-                feature_name = f"{window_func}{window}_shift{window_shift}"
-                rolling = rw_features.groupby(ts_uid_columns)["ys"].rolling(window)
-                feature_value = getattr(rolling, window_func).__call__().values
-                rw_features[feature_name] = feature_value
-    rw_features.drop(["y","ys"], axis=1, inplace=True)
-
-    return rw_features
-
-def compute_lagged_feature(grouped, lag=None, window_shift=None, window_func=None, window_size=None):
+def compute_lagged_predict_feature(grouped, lag=None, window_shift=None, window_func=None, window_size=None):
     """
     grouped: pandas.core.groupby.generic.SeriesGroupBy
         Groupby object containing the response variable "y"
