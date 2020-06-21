@@ -420,7 +420,8 @@ class ForecasterBase(object):
         self.model.fit(**kwargs)
         self.best_iteration = self.model.best_iteration
 
-    def predict(self, predict_data, recursive=False, return_trend=False, bias_corr_func=None):
+    def predict(self, predict_data, recursive=False, return_trend=False, 
+                bias_corr_func=None, predict_kwargs=dict()):
         """
         Parameters
         ----------
@@ -436,7 +437,9 @@ class ForecasterBase(object):
         bias_corr_func: function
             Function to perform bias correction on recursive prediction. 
             It receives a 1-dimensional array 'x' an return an 1-dimensional 
-            array of the same lenght. 
+            array of the same lenght.
+        predict_kwargs: dict
+            Extra arguments passed to the predict call of the model.
         Returns
         ----------
         prediction_dataframe: pandas.DataFrame
@@ -458,12 +461,12 @@ class ForecasterBase(object):
 
         predict_features = self._prepare_predict_features(predict_data)
         if not recursive:
-            prediction = self.model.predict(predict_features)
+            prediction = self.model.predict(predict_features, predict_kwargs)
             prediction_dataframe = (predict_data
                                     .loc[:, ["ds"]+self.ts_uid_columns]
                                     .assign(y_pred = prediction))
         else:
-            _prediction_dataframe = self.recursive_predict(predict_features, bias_corr_func)
+            _prediction_dataframe = self.recursive_predict(predict_features, bias_corr_func, predict_kwargs)
             prediction_dataframe = pd.merge(predict_data.loc[:, ["ds"]+self.ts_uid_columns],
                                             _prediction_dataframe, 
                                             how="left", on=["ds"]+self.ts_uid_columns)
@@ -499,7 +502,7 @@ class ForecasterBase(object):
         self.predict_features = predict_features
         return prediction_dataframe
                 
-    def recursive_predict(self, predict_features, bias_corr_func):
+    def recursive_predict(self, predict_features, bias_corr_func, predict_kwargs):
         min_predict_time = predict_features.ds.min()
         max_predict_time = predict_features.ds.max()
         max_train_time = self.train_data.ds.max()
@@ -540,7 +543,7 @@ class ForecasterBase(object):
                 for lagged_feature in lagged_features:
                     predict_features.loc[time_step, lagged_feature.name].loc[lagged_feature.index] = lagged_feature.values
 
-                _prediction = self.model.predict(predict_features.loc[time_step])
+                _prediction = self.model.predict(predict_features.loc[time_step], predict_kwargs)
                 if bias_corr_func is not None: 
                     _prediction = bias_corr_func(_prediction)
                 _prediction_dataframe = (predict_features

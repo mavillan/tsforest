@@ -62,9 +62,9 @@ class H2OGBMRegressor(BaseRegressor):
         self.target = target
         self.categorical_features = categorical_features
 
-    def predict(self, predict_features):
+    def predict(self, predict_features, predict_kwargs=dict()):
         predict_features_casted = self.cast_dataframe(predict_features, self.input_features, self.target, self.categorical_features)
-        _prediction = self.model.predict(predict_features_casted)
+        _prediction = self.model.predict(predict_features_casted, **predict_kwargs)
         prediction = _prediction.as_data_frame().values[:,0]
         return prediction
 
@@ -122,8 +122,8 @@ class LightGBMRegressor(BaseRegressor):
         self.target = target
         self.categorical_features = categorical_features
 
-    def predict(self, predict_features):
-        prediction = self.model.predict(predict_features.loc[:, self.input_features])
+    def predict(self, predict_features, predict_kwargs=dict()):
+        prediction = self.model.predict(predict_features.loc[:, self.input_features], **predict_kwargs)
         return prediction
     
     def save_model(self, fname, **kwargs):
@@ -173,9 +173,9 @@ class CatBoostRegressor(BaseRegressor):
         self.target = target
         self.categorical_features = categorical_features
     
-    def predict(self, predict_features):
+    def predict(self, predict_features, predict_kwargs=dict()):
         predict_features_casted = self.cast_dataframe(predict_features, self.input_features, self.target, self.categorical_features)
-        prediction = self.model.predict(predict_features_casted)
+        prediction = self.model.predict(predict_features_casted, **predict_kwargs)
         return prediction
 
     def save_model(self, fname, **kwargs):
@@ -227,9 +227,9 @@ class XGBoostRegressor(BaseRegressor):
         self.target = target
         self.categorical_features = categorical_features
     
-    def predict(self, predict_features):
+    def predict(self, predict_features, predict_kwargs=dict()):
         predict_features_casted = self.cast_dataframe(predict_features, self.input_features, self.target, self.categorical_features)
-        prediction = self.model.predict(predict_features_casted, ntree_limit=self.best_iteration)
+        prediction = self.model.predict(predict_features_casted, **predict_kwargs)
         return prediction
 
     def save_model(self, fname, **kwargs):
