@@ -9,6 +9,15 @@ time_features_mapping = {"year_week":"weekofyear",
                          "month_day":"day",
                          "week_day":"dayofweek"}
 
+def parse_window_functions(window_functions):
+    _window_functions = list()
+    for window_func in window_functions:
+        if isinstance(window_func, str):
+            _window_functions.append((window_func, lambda x: getattr(x, window_func)()))
+        else:
+            _window_functions.append(window_func)
+    return _window_functions
+
 def compute_train_features(data, ts_uid_columns, time_features, lags, window_shifts,
                            window_sizes, window_functions, ignore_const_cols=True,
                            n_jobs=1):
@@ -28,7 +37,7 @@ def compute_train_features(data, ts_uid_columns, time_features, lags, window_shi
     window_sizes: list
         List of integer window sizes values to include as features.
     window_functions: list
-        List of string names of the window functions to include as features.
+        List of window functions to include as features.
     ignore_const_cols: bool
         Specify whether to ignore constant columns.
     n_jobs: int
@@ -50,19 +59,21 @@ def compute_train_features(data, ts_uid_columns, time_features, lags, window_shi
         calendar_features = compute_calendar_features(**input_params)
         all_features_list.append(calendar_features)
 
-    lag_kwargs = [{"lag":lag} for lag in lags]  
-    rw_kwargs =  [{"window_shift":window_shift, "window_func":window_func, "window_size":window_size}
-                    for window_shift in window_shifts
-                    for window_func in window_functions
-                    for window_size in window_sizes]
-    input_kwargs = lag_kwargs + rw_kwargs
+    # generating the lag & rolling window features
+    if (len(lags) > 0) or (len(window_sizes) > 0 & len(window_functions) > 0):
+        lag_kwargs = [{"lag":lag} for lag in lags]  
+        rw_kwargs =  [{"window_shift":window_shift, "window_func":window_func, "window_size":window_size}
+                        for window_shift in window_shifts
+                        for window_func in window_functions
+                        for window_size in window_sizes]
+        input_kwargs = lag_kwargs + rw_kwargs
 
-    grouped = data.loc[:, ts_uid_columns+["y"]].groupby(ts_uid_columns)["y"]
-    with Parallel(n_jobs=n_jobs) as parallel:
-        delayed_func = delayed(compute_lagged_train_feature)
-        lagged_features = parallel(delayed_func(grouped, **kwargs) for kwargs in input_kwargs)
-        lagged_features = pd.DataFrame({feature.name:feature.values for feature in lagged_features})
-        all_features_list.append(lagged_features)
+        grouped = data.loc[:, ts_uid_columns+["y"]].groupby(ts_uid_columns)["y"]
+        with Parallel(n_jobs=n_jobs) as parallel:
+            delayed_func = delayed(compute_lagged_train_feature)
+            lagged_features = parallel(delayed_func(grouped, **kwargs) for kwargs in input_kwargs)
+            lagged_features = pd.DataFrame({feature.name:feature.values for feature in lagged_features})
+            all_features_list.append(lagged_features)
 
     # merging all features
     all_features = pd.concat(all_features_list, axis=1)
@@ -87,7 +98,7 @@ def compute_predict_features(data, ts_uid_columns, time_features, lags, window_s
     window_sizes: list
         List of integer window sizes values to include as features.
     window_functions: list
-        List of string names of the window functions to include as features.
+        List of window functions to include as features.
     ignore_const_cols: bool
         Specify whether to ignore constant columns.
     Returns
@@ -114,7 +125,7 @@ def compute_predict_features(data, ts_uid_columns, time_features, lags, window_s
         all_features_list.append(lag_features)
 
     if (len(window_sizes) > 0) & (len(window_functions) > 0):
-        column_names = [f"{window_func}{window}_shift{window_shift}"
+        column_names = [f"{window_func[0]}{window}_shift{window_shift}"
                         for window_shift in window_shifts
                         for window_func in window_functions
                         for window in window_sizes]
@@ -218,8 +229,8 @@ def compute_lagged_train_feature(grouped, lag=None, window_shift=None, window_fu
         integer lag value.
     window_shift: int
         integer window shift value.
-    window_func: string
-        string names of the window function.
+    window_func: tuple
+        2-tuple with function name and function callable.
     window_size: int
         integer window sizes value.
     """
@@ -230,8 +241,9 @@ def compute_lagged_train_feature(grouped, lag=None, window_shift=None, window_fu
         feature_values = grouped.shift(lag)
         feature_values.name = f"lag{lag}"
     elif is_rw_feature and not is_lag_feature:
-        feature_values = grouped.apply(lambda x: getattr(x.shift(window_shift).rolling(window_size), window_func)())
-        feature_values.name = f"{window_func}{window_size}_shift{window_shift}"
+        window_func_name, window_func_call = window_func
+        feature_values = grouped.apply(lambda x: x.shift(window_shift).rolling(window_size).apply(window_func_call))
+        feature_values.name = f"{window_func_name}{window_size}_shift{window_shift}"
     else:
         raise ValueError("Invalid input parameters.")
 
@@ -246,8 +258,8 @@ def compute_lagged_predict_feature(grouped, lag=None, window_shift=None, window_
         integer lag value.
     window_shift: int
         integer window shift value.
-    window_func: string
-        string names of the window function.
+    window_func: tuple
+        2-tuple with function name and function callable.
     window_size: int
         integer window sizes value.
     """
@@ -259,8 +271,9 @@ def compute_lagged_predict_feature(grouped, lag=None, window_shift=None, window_
     elif is_rw_feature and not is_lag_feature:
         lidx = -(window_size + window_shift-1)
         ridx = -(window_shift-1) if window_shift > 1 else None
-        feature_values = grouped.apply(lambda x: getattr(x.iloc[lidx:ridx], window_func)())
-        feature_values.name = f"{window_func}{window_size}_shift{window_shift}"
+        window_func_name,window_func_call = window_func
+        feature_values = grouped.apply(lambda x: x.iloc[lidx:ridx].apply(window_func_call))
+        feature_values.name = f"{window_func_name}{window_size}_shift{window_shift}"
     else:
         raise ValueError("Invalid input parameters.")
         

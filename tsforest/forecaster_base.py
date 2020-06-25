@@ -8,7 +8,8 @@ from tsforest import metrics
 from tsforest.trend import TrendModel
 from tsforest.features import (compute_train_features, 
                                compute_predict_features,
-                               compute_lagged_predict_feature)
+                               compute_lagged_predict_feature,
+                               parse_window_functions)
 from tsforest.config import (calendar_features_names,
                              calendar_cyclical_features_names)
 from sklearn.base import TransformerMixin
@@ -25,7 +26,7 @@ AVAILABLE_TIME_FEATURES = ["year", "quarter", "month", "days_in_month",
                            "week_day_cos", "week_day_sin", "year_day_cos", "year_day_sin",
                            "year_week_cos", "year_week_sin", "month_cos", "month_sin"]
 
-# available methods in pandas.core.window.Rolling as of pandas 1.0.4 
+# available methods in pandas.core.window.Rolling as of pandas 1.0.5
 AVAILABLE_RW_FUNCTIONS = ["count", "sum", "mean", "median", "var", "std", "min", 
                           "max", "corr", "cov", "skew", "kurt", "quantile"]
 
@@ -178,10 +179,20 @@ class ForecasterBase(object):
         if not isinstance(self.window_functions, list):
             raise TypeError("Parameter 'window_functions' should be of type list.")
         else:
-            if any([type(x)!=str for x in self.window_functions]):
-                raise ValueError("Values in 'window_functions' should be string names.")
-            elif any([x not in AVAILABLE_RW_FUNCTIONS for x in self.window_functions]):
-                raise ValueError(f"Values in 'window_functions' should be any of: {AVAILABLE_RW_FUNCTIONS}.")
+            for window_func in self.window_functions:
+                if isinstance(window_func, str):
+                    if window_func not in AVAILABLE_RW_FUNCTIONS:
+                        raise ValueError(f"Names in 'window_functions' should be any of: {AVAILABLE_RW_FUNCTIONS}.")
+                elif isinstance(window_func, tuple):
+                    if len(window_func) != 2:
+                        raise ValueError(f"Window function tuple should by of size 2.")
+                    name,func = window_func
+                    if not isinstance(name, str):
+                        raise TypeError("Window function tuple first entry should by of type 'str'.")
+                    if not callable(func):
+                        raise TypeError("Window function tuple second entry should by callable.")
+                else:
+                    raise ValueError(f"Values in 'window_functions' should be of type 'str' or 'tuple'.")                
     
     def _validate_input_data(self, train_data, valid_index):
         if not isinstance(train_data, pd.DataFrame):
@@ -351,11 +362,15 @@ class ForecasterBase(object):
         self.raw_train_columns = list(train_data.columns)
         if self.copy:
             train_data = train_data.copy(deep=True)
+
         if len(self.ts_uid_columns) == 0:
             # adds a dummy '_internal_ts_uid' column in case of single ts data
             train_data["_internal_ts_uid"] = 0
             self.ts_uid_columns = ["_internal_ts_uid"]
         train_data = train_data.sort_values(self.ts_uid_columns+["ds"], axis=0)
+        
+        if len(self.window_functions) > 0:
+            self.window_functions = parse_window_functions(self.window_functions)
         
         if len(self.trend_models) > 0 or len(self.target_scalers) > 0:
             train_data = self.prepare_target(train_data)
@@ -420,7 +435,8 @@ class ForecasterBase(object):
         self.model.fit(**kwargs)
         self.best_iteration = self.model.best_iteration
 
-    def predict(self, predict_data, recursive=False, return_trend=False, bias_corr_func=None):
+    def predict(self, predict_data, recursive=False, return_trend=False, 
+                bias_corr_func=None, predict_kwargs=dict()):
         """
         Parameters
         ----------
@@ -436,7 +452,9 @@ class ForecasterBase(object):
         bias_corr_func: function
             Function to perform bias correction on recursive prediction. 
             It receives a 1-dimensional array 'x' an return an 1-dimensional 
-            array of the same lenght. 
+            array of the same lenght.
+        predict_kwargs: dict
+            Extra arguments passed to the predict call of the model.
         Returns
         ----------
         prediction_dataframe: pandas.DataFrame
@@ -458,12 +476,12 @@ class ForecasterBase(object):
 
         predict_features = self._prepare_predict_features(predict_data)
         if not recursive:
-            prediction = self.model.predict(predict_features)
+            prediction = self.model.predict(predict_features, predict_kwargs)
             prediction_dataframe = (predict_data
                                     .loc[:, ["ds"]+self.ts_uid_columns]
                                     .assign(y_pred = prediction))
         else:
-            _prediction_dataframe = self.recursive_predict(predict_features, bias_corr_func)
+            _prediction_dataframe = self.recursive_predict(predict_features, bias_corr_func, predict_kwargs)
             prediction_dataframe = pd.merge(predict_data.loc[:, ["ds"]+self.ts_uid_columns],
                                             _prediction_dataframe, 
                                             how="left", on=["ds"]+self.ts_uid_columns)
@@ -499,7 +517,7 @@ class ForecasterBase(object):
         self.predict_features = predict_features
         return prediction_dataframe
                 
-    def recursive_predict(self, predict_features, bias_corr_func):
+    def recursive_predict(self, predict_features, bias_corr_func, predict_kwargs):
         min_predict_time = predict_features.ds.min()
         max_predict_time = predict_features.ds.max()
         max_train_time = self.train_data.ds.max()
@@ -540,7 +558,7 @@ class ForecasterBase(object):
                 for lagged_feature in lagged_features:
                     predict_features.loc[time_step, lagged_feature.name].loc[lagged_feature.index] = lagged_feature.values
 
-                _prediction = self.model.predict(predict_features.loc[time_step])
+                _prediction = self.model.predict(predict_features.loc[time_step], predict_kwargs)
                 if bias_corr_func is not None: 
                     _prediction = bias_corr_func(_prediction)
                 _prediction_dataframe = (predict_features
