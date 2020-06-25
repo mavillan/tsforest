@@ -55,12 +55,8 @@ class ForecasterBase(object):
         value, a trained sklearn.base.TransformerMixin object.
     lags: list
         List of integer lag values to include as features.
-    window_shifts: list
-        List of integer window shift values.
-    window_sizes: list
-        List of integer window sizes values to include as features.
-    window_functions: list
-        List of string names of the window functions to include as features.
+    window_functions: dict
+       Dictionary with the definition of the rolling window funtions.
     n_jobs: int
         Number of jobs to run in parallel.
     copy: bool
@@ -69,8 +65,8 @@ class ForecasterBase(object):
     """
     def __init__(self, model_params=dict(), time_features=[], exclude_features=[], 
                  categorical_features=dict(), calendar_anomaly=list(), ts_uid_columns=list(), 
-                 trend_models=dict(), target_scalers=dict(), lags=list(), window_shifts=[1], 
-                 window_sizes=list(), window_functions=list(), n_jobs=-1, copy=False):
+                 trend_models=dict(), target_scalers=dict(), lags=list(), window_functions=dict(), 
+                 n_jobs=-1, copy=False):
         self.model = None
         self.model_params = model_params
         self.time_features = time_features
@@ -85,8 +81,6 @@ class ForecasterBase(object):
         self.trend_models = trend_models
         self.target_scalers = target_scalers
         self.lags = lags
-        self.window_shifts = window_shifts
-        self.window_sizes = window_sizes
         self.window_functions = window_functions
         self.n_jobs = n_jobs
         self.copy = copy
@@ -159,40 +153,25 @@ class ForecasterBase(object):
                 raise ValueError("Values in 'lags' should be integers.")
             elif any([x<1 for x in self.lags]):
                 raise ValueError("Values in 'lags' should be integers greater or equal to 1.")
-
-        if not isinstance(self.window_shifts, list):
-            raise TypeError("Parameter 'window_shifts' should be of type 'list'.")
-        else:
-            if any([type(x)!=int for x in self.window_shifts]):
-                raise ValueError("Values in 'window_shifts' should be integers.")
-            elif any([x<1 for x in self.window_shifts]):
-                raise ValueError("Values in 'window_shifts' should be integers greater or equal to 1.")
         
-        if not isinstance(self.window_sizes, list):
-            raise TypeError("Parameter 'window_sizes' should be of type 'list'.")
-        else:
-            if any([type(x)!=int for x in self.window_sizes]):
-                raise ValueError("Values in 'window_sizes' should be integers.")
-            elif any([x<1 for x in self.window_sizes]):
-                raise ValueError("Values in 'window_sizes' should be integers greater or equal to 1.")
-        
-        if not isinstance(self.window_functions, list):
-            raise TypeError("Parameter 'window_functions' should be of type list.")
-        else:
-            for window_func in self.window_functions:
-                if isinstance(window_func, str):
-                    if window_func not in AVAILABLE_RW_FUNCTIONS:
-                        raise ValueError(f"Names in 'window_functions' should be any of: {AVAILABLE_RW_FUNCTIONS}.")
-                elif isinstance(window_func, tuple):
-                    if len(window_func) != 2:
-                        raise ValueError(f"Window function tuple should by of size 2.")
-                    name,func = window_func
-                    if not isinstance(name, str):
-                        raise TypeError("Window function tuple first entry should by of type 'str'.")
-                    if not callable(func):
-                        raise TypeError("Window function tuple second entry should by callable.")
-                else:
-                    raise ValueError(f"Values in 'window_functions' should be of type 'str' or 'tuple'.")                
+        # TODO: add validation for window_functions dict
+        # if not isinstance(self.window_functions, list):
+        #     raise TypeError("Parameter 'window_functions' should be of type list.")
+        # else:
+        #     for window_func in self.window_functions:
+        #         if isinstance(window_func, str):
+        #             if window_func not in AVAILABLE_RW_FUNCTIONS:
+        #                 raise ValueError(f"Names in 'window_functions' should be any of: {AVAILABLE_RW_FUNCTIONS}.")
+        #         elif isinstance(window_func, tuple):
+        #             if len(window_func) != 2:
+        #                 raise ValueError(f"Window function tuple should by of size 2.")
+        #             name,func = window_func
+        #             if not isinstance(name, str):
+        #                 raise TypeError("Window function tuple first entry should by of type 'str'.")
+        #             if not callable(func):
+        #                 raise TypeError("Window function tuple second entry should by callable.")
+        #         else:
+        #             raise ValueError(f"Values in 'window_functions' should be of type 'str' or 'tuple'.")                
     
     def _validate_input_data(self, train_data, valid_index):
         if not isinstance(train_data, pd.DataFrame):
@@ -270,9 +249,7 @@ class ForecasterBase(object):
                                                     ts_uid_columns=self.ts_uid_columns,
                                                     time_features=self.time_features,
                                                     lags=self.lags,
-                                                    window_shifts=self.window_shifts,
-                                                    window_sizes=self.window_sizes,
-                                                    window_functions=self.window_functions,
+                                                    window_functions=self._window_functions,
                                                     ignore_const_cols=False)
 
         if "calendar_anomaly" in predict_features.columns:
@@ -333,9 +310,7 @@ class ForecasterBase(object):
                                                 ts_uid_columns=self.ts_uid_columns,
                                                 time_features=self.time_features,
                                                 lags=self.lags,
-                                                window_shifts=self.window_shifts,
-                                                window_sizes=self.window_sizes,
-                                                window_functions=self.window_functions,
+                                                window_functions=self._window_functions,
                                                 ignore_const_cols=True,
                                                 n_jobs=self.n_jobs)
         if "zero_response" in train_features.columns:
@@ -370,7 +345,9 @@ class ForecasterBase(object):
         train_data = train_data.sort_values(self.ts_uid_columns+["ds"], axis=0)
         
         if len(self.window_functions) > 0:
-            self.window_functions = parse_window_functions(self.window_functions)
+            self._window_functions = parse_window_functions(self.window_functions)
+        else:
+            self._window_functions = list()
         
         if len(self.trend_models) > 0 or len(self.target_scalers) > 0:
             train_data = self.prepare_target(train_data)
@@ -529,8 +506,9 @@ class ForecasterBase(object):
             "predict time period cannot have time gaps from last time-step in training data."
 
         ts_uid_in_predict = predict_features.loc[:, self.ts_uid_columns].drop_duplicates()
-        max_offset = max(0 if len(self.lags)==0 else max(self.lags), \
-                         0 if len(self.window_sizes)==0 else max(self.window_sizes)+max(self.window_shifts))
+        max_lag = max(self.lags + [0])
+        max_rw  = max([np.sum(window_func[2:]) for window_func in self._window_functions] + [0])
+        max_offset = max(max_lag, max_rw)
         max_offset_time = min_predict_time - pd.DateOffset(max_offset+1)
         train_temp = (self.train_data
                       .loc[:, self.ts_uid_columns+["ds","y"]]
@@ -547,10 +525,11 @@ class ForecasterBase(object):
 
             for time_step in np.sort(predict_features.ds.unique()):
                 lag_kwargs = [{"lag":lag} for lag in self.lags]   
-                rw_kwargs =  [{"window_shift":window_shift, "window_func":window_func, "window_size":window_size}
-                              for window_shift in self.window_shifts
-                              for window_func in self.window_functions
-                              for window_size in self.window_sizes]
+                rw_kwargs =  [{"func_name":window_func[0],
+                               "func_call":window_func[1],
+                               "window_shift":window_func[2], 
+                               "window_size":window_func[3]}
+                              for window_func in self._window_functions]
                 input_kwargs = lag_kwargs + rw_kwargs
 
                 grouped = train_temp.groupby(self.ts_uid_columns)["y"]
