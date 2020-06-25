@@ -13,7 +13,7 @@ def parse_window_functions(window_functions):
     _window_functions = list()
     for window_func in window_functions:
         if isinstance(window_func, str):
-            _window_functions.append((window_func, lambda x: getattr(x, window_func)()))
+            _window_functions.append((window_func, lambda x,wf=window_func: getattr(x, wf)()))
         else:
             _window_functions.append(window_func)
     return _window_functions
@@ -60,7 +60,7 @@ def compute_train_features(data, ts_uid_columns, time_features, lags, window_shi
         all_features_list.append(calendar_features)
 
     # generating the lag & rolling window features
-    if (len(lags) > 0) or (len(window_sizes) > 0 & len(window_functions) > 0):
+    if (len(lags) > 0) or (len(window_sizes) > 0) and (len(window_functions) > 0):
         lag_kwargs = [{"lag":lag} for lag in lags]  
         rw_kwargs =  [{"window_shift":window_shift, "window_func":window_func, "window_size":window_size}
                         for window_shift in window_shifts
@@ -124,7 +124,7 @@ def compute_predict_features(data, ts_uid_columns, time_features, lags, window_s
                                     columns=column_names)
         all_features_list.append(lag_features)
 
-    if (len(window_sizes) > 0) & (len(window_functions) > 0):
+    if (len(window_sizes) > 0) and (len(window_functions) > 0):
         column_names = [f"{window_func[0]}{window}_shift{window_shift}"
                         for window_shift in window_shifts
                         for window_func in window_functions
@@ -272,7 +272,7 @@ def compute_lagged_predict_feature(grouped, lag=None, window_shift=None, window_
         lidx = -(window_size + window_shift-1)
         ridx = -(window_shift-1) if window_shift > 1 else None
         window_func_name,window_func_call = window_func
-        feature_values = grouped.apply(lambda x: x.iloc[lidx:ridx].apply(window_func_call))
+        feature_values = grouped.apply(lambda x: window_func_call(x.iloc[lidx:ridx]))
         feature_values.name = f"{window_func_name}{window_size}_shift{window_shift}"
     else:
         raise ValueError("Invalid input parameters.")
