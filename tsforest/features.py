@@ -273,7 +273,7 @@ def compute_lagged_predict_feature(grouped, lag=None, func_name=None, func_call=
             feature_values = grouped.apply(lambda x: getattr(x.iloc[lidx:ridx], func_name)())
         else:
             # custom function
-            feature_values = grouped.apply(lambda x: func_call(x.iloc[lidx:ridx]))
+            feature_values = grouped.apply(lambda x: func_call(x.iloc[lidx:ridx].values))
         feature_values.name = f"{func_name}{window_size}_shift{window_shift}"
     else:
         raise ValueError("Invalid input parameters.")
