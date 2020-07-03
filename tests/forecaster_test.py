@@ -77,8 +77,12 @@ class TestForecaster(unittest.TestCase):
     def test_it_fit_with_rw_features(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "time_features":self.time_features,
-                        "window_functions":['mean','median','min','max','sum'],
-                        "window_sizes":[7,14,21,28]}
+                        "window_functions":{
+                            "mean": (None, [1,], [7,14,21,28]),
+                            "median": (None, [1,], [7,14,21,28]),
+                            "max": (None, [1,], [7,14,21,28]),
+                            "min": (None, [1,], [7,14,21,28]),}
+                        }
         if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
 
@@ -109,8 +113,12 @@ class TestForecaster(unittest.TestCase):
     def test_it_fit_predict_with_rw_features(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "time_features":self.time_features,
-                        "window_functions":['mean','median','min','max','sum'],
-                        "window_sizes":[7,14,21,28]}
+                        "window_functions":{
+                            "mean": (None, [1,], [7,14,21,28]),
+                            "median": (None, [1,], [7,14,21,28]),
+                            "max": (None, [1,], [7,14,21,28]),
+                            "min": (None, [1,], [7,14,21,28]),}
+                        }
         if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
 
@@ -206,8 +214,12 @@ class TestForecaster(unittest.TestCase):
     def test_it_fit_evaluate_with_rw_features_with_bounded_error(self):
         model_kwargs = {"model_params":get_default_model_params(self.model_class),
                         "time_features":self.time_features,
-                        "window_functions":['mean','median','min','max','sum'],
-                        "window_sizes":[7,14,21,28]}
+                        "window_functions":{
+                            "mean": (None, [1,], [7,14,21,28]),
+                            "median": (None, [1,], [7,14,21,28]),
+                            "max": (None, [1,], [7,14,21,28]),
+                            "min": (None, [1,], [7,14,21,28]),}
+                        }
         if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
 
