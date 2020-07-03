@@ -56,7 +56,7 @@ class ForecasterBase(object):
     lags: list
         List of integer lag values to include as features.
     window_functions: dict
-       Dictionary with the definition of the rolling window funtions.
+       Dictionary with the definition of the rolling window functions.
     n_jobs: int
         Number of jobs to run in parallel.
     copy: bool
@@ -154,24 +154,34 @@ class ForecasterBase(object):
             elif any([x<1 for x in self.lags]):
                 raise ValueError("Values in 'lags' should be integers greater or equal to 1.")
         
-        # TODO: add validation for window_functions dict
-        # if not isinstance(self.window_functions, list):
-        #     raise TypeError("Parameter 'window_functions' should be of type list.")
-        # else:
-        #     for window_func in self.window_functions:
-        #         if isinstance(window_func, str):
-        #             if window_func not in AVAILABLE_RW_FUNCTIONS:
-        #                 raise ValueError(f"Names in 'window_functions' should be any of: {AVAILABLE_RW_FUNCTIONS}.")
-        #         elif isinstance(window_func, tuple):
-        #             if len(window_func) != 2:
-        #                 raise ValueError(f"Window function tuple should by of size 2.")
-        #             name,func = window_func
-        #             if not isinstance(name, str):
-        #                 raise TypeError("Window function tuple first entry should by of type 'str'.")
-        #             if not callable(func):
-        #                 raise TypeError("Window function tuple second entry should by callable.")
-        #         else:
-        #             raise ValueError(f"Values in 'window_functions' should be of type 'str' or 'tuple'.")                
+        if not isinstance(self.window_functions, dict):
+            raise TypeError("Parameter 'window_functions' should be of type dict.")
+        else:
+            for func_name,rw_config in self.window_functions.items():
+                if not isinstance(func_name, str):
+                    raise TypeError("Keys in 'window_functions' should by of type str.")
+                if isinstance(rw_config, tuple):
+                    if len(rw_config) != 3:
+                        raise ValueError("Window function tuple should by of size 3.")
+                    function,window_shifts,window_sizes = rw_config
+                    if function is not None and not callable(function):
+                        raise TypeError("Window function tuple 1st value should be None or callable.")
+                    if not isinstance(window_shifts, list):
+                        raise TypeError("Window function tuple 2nd value should be of type list.")
+                    else:
+                        if not all([isinstance(window_shift,int) for window_shift in window_shifts]):
+                            raise TypeError("Values in window_shifts shoud be of type int.")
+                        elif not all([window_shift>=1 for window_shift in window_shifts]):
+                            raise ValueError("Values in window_shifts should be equal or greater than 1.")
+                    if not isinstance(window_sizes, list):
+                        raise TypeError("Window function tuple 3rd value should be of type list.")
+                    else:
+                        if not all([isinstance(window_size,int) for window_size in window_sizes]):
+                            raise TypeError("Values in window_functions shoud be of type int.")
+                        elif not all([window_size>1 for window_size in window_sizes]):
+                            raise ValueError("Values in window_sizes should be greater than 1.")
+                else:
+                    raise TypeError("Values in 'window_functions' should be of type tuple.")                
     
     def _validate_input_data(self, train_data, valid_index):
         if not isinstance(train_data, pd.DataFrame):

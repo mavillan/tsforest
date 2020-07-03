@@ -11,8 +11,8 @@ time_features_mapping = {"year_week":"weekofyear",
 
 def parse_window_functions(window_functions):
     _window_functions = list()
-    for func_name,window_func_definition in window_functions.items():
-        func_call,window_shifts,window_sizes = window_func_definition
+    for func_name,rw_config in window_functions.items():
+        func_call,window_shifts,window_sizes = rw_config
         for window_shift in window_shifts:
             for window_size in window_sizes:
                 _window_functions.append((func_name, func_call, window_shift, window_size))
