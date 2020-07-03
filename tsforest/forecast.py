@@ -3,7 +3,7 @@ from tsforest.forest import (H2OGBMRegressor,
                              LightGBMRegressor, 
                              CatBoostRegressor, 
                              XGBoostRegressor)
-from tsforest.forecaster_base import ForecasterBase
+from tsforest.forecast_base import ForecasterBase
 import category_encoders as ce
 
 class H2OGBMForecaster(ForecasterBase):

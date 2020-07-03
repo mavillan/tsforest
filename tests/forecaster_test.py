@@ -2,10 +2,10 @@ import numpy as np
 import pandas as pd
 import unittest
 from parameterized import parameterized_class
-from tsforest.forecaster import (CatBoostForecaster,
-                                 LightGBMForecaster,
-                                 XGBoostForecaster,
-                                 H2OGBMForecaster)
+from tsforest.forecast import (CatBoostForecaster,
+                               LightGBMForecaster,
+                               XGBoostForecaster,
+                               H2OGBMForecaster)
 from tsforest.utils import make_time_range
 from tsforest.trend import compute_trend_models
 from tsforest.scaler import compute_scalers
