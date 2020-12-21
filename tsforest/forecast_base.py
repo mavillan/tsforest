@@ -201,16 +201,20 @@ class ForecasterBase(object):
             raise ValueError("Columns 'internal_ts_uid' and '_internal_ts_uid' is reserved for internal usage and can not be in 'train_data' dataframe.")
     
     def _validate_predict_data(self, predict_data):
+        _raw_train_columns = set(self.raw_train_columns)
+        _raw_train_columns.discard("y")
         if not isinstance(predict_data, pd.DataFrame):
             raise TypeError("Parameter 'predict_data' should be of type pandas.DataFrame.")
-        elif not (set(self.raw_train_columns) - set(predict_data.columns) == {"y"}):
-            raise ValueError("'predict_data' shoud have the same columns as 'train_data' except for 'y'.")
+        elif not (_raw_train_columns <= set(predict_data.columns)):
+            missing_columns = _raw_train_columns - set(predict_data.columns)
+            raise ValueError(f"Columns: {missing_columns} are missing in 'predict_data'.")
     
     def _validate_evaluate_data(self, eval_data, metric):
         if not isinstance(eval_data, pd.DataFrame):
             raise TypeError("'eval_data' should be of type pandas.DataFrame.")
-        elif not (set(self.raw_train_columns) == set(eval_data.columns)):
-            raise ValueError("'eval_data' should have the same columns as 'train_data'.")
+        elif not (set(self.raw_train_columns) <= set(eval_data.columns)):
+            missing_columns = set(self.raw_train_columns) - set(eval_data.columns)
+            raise ValueError(f"Columns: {missing_columns} are missing in 'eval_data'.")
 
         if not isinstance(metric, str):
             raise TypeError("'metric' should be of type str.")
