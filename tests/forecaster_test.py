@@ -8,7 +8,6 @@ from tsforest.forecast import (CatBoostForecaster,
                                H2OGBMForecaster)
 from tsforest.utils import make_time_range
 from tsforest.trend import compute_trend_models
-from tsforest.scaler import compute_scalers
 
 def get_default_model_params(model_class):
     if model_class == CatBoostForecaster:
@@ -22,11 +21,12 @@ def get_default_model_params(model_class):
 
 TEST_DATA = ['./tests/tests_data/data_single_ts.csv',
              './tests/tests_data/data_many_ts.csv']
-TEST_MODELS = [CatBoostForecaster,
-               LightGBMForecaster,
-               XGBoostForecaster,
-               H2OGBMForecaster
-              ]
+TEST_MODELS = [
+    CatBoostForecaster,
+    LightGBMForecaster,
+    XGBoostForecaster,
+    H2OGBMForecaster,
+]
 
 @parameterized_class([
     {"data_path":data_path, "model_class":model_class}
@@ -145,10 +145,7 @@ class TestForecaster(unittest.TestCase):
                         "time_features":self.time_features}
         if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
-            target_scalers = compute_scalers(self.train_data, ts_uid_columns=["ts_uid"])
-        else:
-            target_scalers = compute_scalers(self.train_data)
-        model_kwargs["target_scalers"] = target_scalers
+        model_kwargs["target_scaler"] = "standard"
         
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=self.train_data)
@@ -160,12 +157,10 @@ class TestForecaster(unittest.TestCase):
         if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
             trend_models = compute_trend_models(self.train_data, ts_uid_columns=["ts_uid"])
-            target_scalers = compute_scalers(self.train_data, ts_uid_columns=["ts_uid"])
         else:
             trend_models = compute_trend_models(self.train_data)
-            target_scalers = compute_scalers(self.train_data)
         model_kwargs["trend_models"] = trend_models
-        model_kwargs["target_scalers"] = target_scalers
+        model_kwargs["target_scaler"] = "standard"
         
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=self.train_data)
@@ -252,10 +247,7 @@ class TestForecaster(unittest.TestCase):
                         "time_features":self.time_features}
         if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
-            target_scalers = compute_scalers(self.train_data, ts_uid_columns=["ts_uid"])
-        else:
-            target_scalers = compute_scalers(self.train_data)
-        model_kwargs["target_scalers"] = target_scalers
+        model_kwargs["target_scaler"] = "standard"
 
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=self.train_data)
@@ -270,12 +262,10 @@ class TestForecaster(unittest.TestCase):
         if "ts_uid" in self.train_data.columns:
             model_kwargs["ts_uid_columns"] = ["ts_uid"]
             trend_models = compute_trend_models(self.train_data, ts_uid_columns=["ts_uid"])
-            target_scalers = compute_scalers(self.train_data, ts_uid_columns=["ts_uid"])
         else:
             trend_models = compute_trend_models(self.train_data)
-            target_scalers = compute_scalers(self.train_data)
         model_kwargs["trend_models"] = trend_models
-        model_kwargs["target_scalers"] = target_scalers
+        model_kwargs["target_scaler"] = "standard"
 
         fcaster = self.model_class(**model_kwargs)
         fcaster.fit(train_data=self.train_data)
