@@ -440,6 +440,30 @@ class ForecasterBase(object):
         self.model.fit(**kwargs)
         self.best_iteration = self.model.best_iteration
 
+    def tune(self, train_data=None, valid_index=pd.Int64Index([]), fit_kwargs=dict()):
+        """
+        Parameters
+        ----------
+        train_data: pandas.DataFrame
+            Dataframe with at least columns 'ds' and 'y'.
+        valid_index: pandas.Index
+            Array with indexes from train_data to be used for validation.
+        fit_kwargs: dict
+            Extra arguments passed to the fit/train call of the model.
+        """
+        if not self._features_already_prepared:
+            train_features,valid_features = self.prepare_features(train_data, valid_index)
+        else:
+            train_features = self.train_features
+            valid_features = self.valid_features
+        kwargs = {"train_features":train_features,
+                  "valid_features":valid_features,
+                  "input_features":self.input_features,
+                  "categorical_features":self._categorical_features,
+                  "target":"y",
+                  "fit_kwargs":fit_kwargs}
+        self.model.tune(**kwargs)
+
     def predict(self, predict_data, recursive=False, return_trend=False, 
                 bias_corr_func=None, predict_kwargs=dict()):
         """
