@@ -4,10 +4,9 @@ dask>=2.1.0
 distributed>=2.1.0
 lightgbm>=2.2.3
 h2o>=3.26.0
-stldecompose>=0.0.5
-statsmodels==0.10.2
+statsmodels>=0.12.2
 fbprophet>=0.5
-tqdm>=4.30.0
+tqdm>=4.62.0
 catboost>=0.17.0
 category_encoders>=2.1.0
 xgboost>=0.90.0

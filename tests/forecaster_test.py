@@ -19,8 +19,10 @@ def get_default_model_params(model_class):
     elif model_class == H2OGBMForecaster:
         return {'ntrees':30,'learn_rate':0.3}
 
-TEST_DATA = ['./tests/tests_data/data_single_ts.csv',
-             './tests/tests_data/data_many_ts.csv']
+TEST_DATA = [
+    './tests/tests_data/data_single_ts.csv',
+    './tests/tests_data/data_many_ts.csv',
+]
 TEST_MODELS = [
     CatBoostForecaster,
     LightGBMForecaster,

@@ -1,9 +1,7 @@
 import numpy as np
 import pandas as pd
 from fbprophet import Prophet
-from stldecompose import decompose, forecast
-from stldecompose.forecast_funcs import naive, drift, mean, seasonal_naive
-from tsforest.config import default_prophet_kwargs, default_stl_kwargs
+from tsforest.config import default_prophet_kwargs
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
@@ -55,85 +53,26 @@ def compute_prophet_trend(prophet_model, predict_dataframe=None, periods=30, inc
         trend = prophet_model.predict_trend(predict_dataframe)
     return trend
 
-def fit_stl_model(data, kwargs):
-    """
-    Parameters
-    -----------
-    data: pandas.DataFrame 
-        trainig data with columns 'ds' (dates) and 'y' (values)
-    period: int
-        period of the seasonal component to fit
-    Returns
-    ----------
-    pd.DataFrame
-        A dataframe with columns 'ds' and 'trend' with the trend
-        estimation and projection
-    """
-    # filling the time gaps
-    data = data.copy()
-    data.set_index("ds", inplace=True)
-    data = (data
-            .resample("D")
-            .mean()
-            .interpolate("linear"))
-    # trend estimation with stl
-    stl_model = decompose(data, **kwargs)
-    return stl_model
-
-def compute_stl_trend(stl_model, predict_dataframe=None):
-    """
-    Parameters
-    -----------
-    stl_model: statsmodels.tsa.seasonal.DecomposeResult
-        fitted stl model
-    predict_dataframe: pandas.DataFrame
-        dataframe containg the column 'ds' with times/dates to predict
-    Returns
-    ----------
-    pd.DataFrame
-        A dataframe with columns 'ds' and 'trend' with the trend
-        estimation and projection
-    """
-    stl_trend = stl_model.trend.copy()
-    stl_trend.rename(columns={"y":"trend"}, inplace=True)
-    # calculating the number of predictions to predict
-    delta = predict_dataframe.ds.max() - stl_trend.index.max()
-    freq = predict_dataframe.ds.diff().min()
-    n_periods = int(delta / freq)
-    # predicting
-    stl_fcst = forecast(stl_model, steps=n_periods, fc_func=drift)
-    stl_fcst.rename(columns={"drift":"trend"}, inplace=True)
-    stl_trend = stl_trend.append(stl_fcst)
-    # keep dates within prediction_dataframe 
-    trend = stl_trend.loc[predict_dataframe.ds]
-    trend.reset_index(inplace=True)
-    trend.rename({"index":"ds"}, axis=1, inplace=True)   
-    return trend
-
 class TrendModel():
     """
     Parameters
     ----------
-    backend: string
-        Name of the backend to be used: 'prophet' or 'stl'.
+    model_kwargs: dict
+        Prophet model params
     """
 
-    def __init__(self, backend="prophet"):
-        self.backend = backend
+    def __init__(self, model_kwargs):
+        self.model_kwargs = model_kwargs
 
-    def fit(self, data, model_kwargs):
+    def fit(self, data):
         """
         Parameters
         ----------
         data: pandas.DataFrame
             Dataframe with columns 'ds' and 'y'.
         """
-        if self.backend == "prophet":
-            prophet_kwargs ={**default_prophet_kwargs, **model_kwargs}
-            trend_model = fit_prophet_model(data, prophet_kwargs)
-        elif self.backend == "stl":
-            stl_kwargs = {**default_stl_kwargs, **model_kwargs}
-            trend_model = fit_stl_model(data, stl_kwargs)
+        prophet_kwargs ={**default_prophet_kwargs, **self.model_kwargs}
+        trend_model = fit_prophet_model(data, prophet_kwargs)
         self.trend_model = trend_model
 
     def predict(self, predict_period):
@@ -143,24 +82,17 @@ class TrendModel():
         predict_period: pandas.DataFrame
             Dataframe with column 'ds' containing the time period to be predicted.
         """
-        if self.backend == "prophet":
-            trend = compute_prophet_trend(self.trend_model, predict_dataframe=predict_period)
-            trend_dataframe = pd.DataFrame({"ds":predict_period.ds.values, "trend":trend.values})
-        if self.backend == "stl":
-            trend_dataframe = compute_stl_trend(self.trend_model, predict_dataframe=predict_period) 
+        trend = compute_prophet_trend(self.trend_model, predict_dataframe=predict_period)
+        trend_dataframe = pd.DataFrame({"ds":predict_period.ds.values, "trend":trend.values})
         return trend_dataframe
 
-def compute_trend_model(train_data_chunk, key, backend, model_kwargs):
-    if (backend == "prophet") or (backend is None and train_data_chunk.shape[0] >= 365):
-        trend_model = TrendModel(backend="prophet")
-        trend_model.fit(train_data_chunk.loc[:, ["ds", "y"]], model_kwargs)
-    elif (backend == "stl") or (backend is None and train_data_chunk.shape[0] < 365):
-        trend_model = TrendModel(backend="stl")
-        trend_model.fit(train_data_chunk.loc[:, ["ds", "y"]], model_kwargs)
+def compute_trend_model(train_data_chunk, key, model_kwargs):
+    trend_model = TrendModel(model_kwargs=model_kwargs)
+    trend_model.fit(train_data_chunk.loc[:, ["ds", "y"]])
     return {key:trend_model}
 
 def compute_trend_models(data, valid_index=pd.Index([]), ts_uid_columns=None, 
-                         backend="prophet", model_kwargs=dict(), n_jobs=-1):
+                         model_kwargs=dict(), n_jobs=-1):
     train_data = data.drop(valid_index, axis=0)
     if ts_uid_columns is None:
         train_data["ts_uid"] = 0
@@ -177,8 +109,10 @@ def compute_trend_models(data, valid_index=pd.Index([]), ts_uid_columns=None,
     with Parallel(n_jobs=n_jobs) as parallel:
         delayed_func = delayed(compute_trend_model)
         with tqdm(train_data_split) as tqdm_train_data_split:
-            trend_models = parallel(delayed_func(*data_chunk, backend, model_kwargs)
-                                    for data_chunk in tqdm_train_data_split)
+            trend_models = parallel(
+                delayed_func(*data_chunk, model_kwargs)
+                for data_chunk in tqdm_train_data_split
+            )
         tqdm_train_data_split.close()
 
     trend_models_out = {}

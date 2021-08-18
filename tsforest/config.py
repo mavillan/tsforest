@@ -59,11 +59,6 @@ default_prophet_kwargs = {
     "yr_prior_scale"   : 10.
 } 
 
-# stl default parameters 
-default_stl_kwargs = {
-    "period": 7
-} 
-
 # names of calendar features
 calendar_features_names = [
     "year",
