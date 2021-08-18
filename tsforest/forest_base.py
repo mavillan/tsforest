@@ -40,6 +40,24 @@ class BaseRegressor(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def tune(self, train_features, valid_features, input_features, target, categorical_features):
+        """
+        Parameters
+        ----------
+        train_features: pandas.DataFrame
+            Dataframe containing the features corresponding to the training data.
+        valid_features: pandas.DataFrame
+            Dataframe containing the features corresponding to the validation period.
+        input_features: list
+            List of column names to use as predictor features.
+        target: str
+            Name of column to use as target variable.
+        categorical_features: list
+            List of column names of categorical features.
+        """
+        pass
+
+    @abc.abstractmethod
     def predict(self, predict_features):
         """
         Parameters

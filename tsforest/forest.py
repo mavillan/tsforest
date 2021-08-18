@@ -4,16 +4,22 @@ import h2o
 import lightgbm
 import catboost
 import xgboost
+import optuna
+import optuna.integration.lightgbm as olgb
 from tsforest.config import cat_parameters, lgbm_parameters, gbm_parameters, xgb_parameters
 from tsforest.forest_base import BaseRegressor
 
-NTREES_LGB_ALIASES = {"num_iteration", "num_iterations", 
-                      "n_iter", "num_tree", "num_trees", 
-                      "num_round", "num_rounds"}
-EARLY_STOP_LGB_ALIASES = {"early_stopping_round",
-                          "early_stopping_rounds",
-                          "early_stopping",
-                          "n_iter_no_change"}
+NTREES_LGB_ALIASES = {
+    "num_iteration", "num_iterations",
+    "n_iter", "num_tree", "num_trees",
+    "num_round", "num_rounds"
+}
+EARLY_STOP_LGB_ALIASES = {
+    "early_stopping_round",
+    "early_stopping_rounds",
+    "early_stopping",
+    "n_iter_no_change"
+}
 
 def fetch_param_key(model_params, aliases):
     keys = model_params.keys() & aliases
@@ -61,6 +67,9 @@ class H2OGBMRegressor(BaseRegressor):
         self.input_features = input_features
         self.target = target
         self.categorical_features = categorical_features
+
+    def tune(self, train_features, valid_features, input_features, target, categorical_features, fit_kwargs=dict()):
+        raise NotImplementedError
 
     def predict(self, predict_features, predict_kwargs=dict()):
         predict_features_casted = self.cast_dataframe(predict_features, self.input_features, self.target, self.categorical_features)
@@ -122,6 +131,30 @@ class LightGBMRegressor(BaseRegressor):
         self.target = target
         self.categorical_features = categorical_features
 
+    def tune(self, train_features, valid_features, input_features, target, categorical_features, fit_kwargs=dict()):
+        train_features_casted = self.cast_dataframe(train_features, input_features, target, categorical_features)
+        valid_features_casted = self.cast_dataframe(valid_features, input_features, target, categorical_features) \
+                                if valid_features is not None else None
+        model_params = dict(self.model_params)
+        ntrees_param_key = fetch_param_key(model_params, NTREES_LGB_ALIASES)
+        early_stop_param_key = fetch_param_key(model_params, EARLY_STOP_LGB_ALIASES)
+        training_params = {"train_set":train_features_casted}
+        if valid_features is not None:
+            training_params["valid_sets"] = valid_features_casted
+            if early_stop_param_key is not None:
+                training_params["early_stopping_rounds"] = model_params.pop(early_stop_param_key)
+        elif early_stop_param_key is not None:
+            del model_params[early_stop_param_key]
+        if ntrees_param_key is not None:
+            training_params["num_boost_round"] = model_params.pop(ntrees_param_key)
+        training_params["params"] = model_params
+        # model training
+        self.model = olgb.train(**training_params, **fit_kwargs)
+        self.best_iteration = self.model.best_iteration if self.model.best_iteration>0 else self.model.num_trees()
+        self.input_features = input_features
+        self.target = target
+        self.categorical_features = categorical_features
+
     def predict(self, predict_features, predict_kwargs=dict()):
         prediction = self.model.predict(predict_features.loc[:, self.input_features], **predict_kwargs)
         return prediction
@@ -172,6 +205,9 @@ class CatBoostRegressor(BaseRegressor):
         self.input_features = input_features
         self.target = target
         self.categorical_features = categorical_features
+
+    def tune(self, train_features, valid_features, input_features, target, categorical_features, fit_kwargs=dict()):
+        raise NotImplementedError
     
     def predict(self, predict_features, predict_kwargs=dict()):
         predict_features_casted = self.cast_dataframe(predict_features, self.input_features, self.target, self.categorical_features)
@@ -226,6 +262,9 @@ class XGBoostRegressor(BaseRegressor):
         self.input_features = input_features
         self.target = target
         self.categorical_features = categorical_features
+
+    def tune(self, train_features, valid_features, input_features, target, categorical_features, fit_kwargs=dict()):
+        raise NotImplementedError
     
     def predict(self, predict_features, predict_kwargs=dict()):
         predict_features_casted = self.cast_dataframe(predict_features, self.input_features, self.target, self.categorical_features)
