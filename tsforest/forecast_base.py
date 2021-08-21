@@ -394,7 +394,7 @@ class ForecasterBase(object):
                         valid_features["_"+feature] = transformed.values
                     else:
                         del valid_features[feature]
-                        valid_features[feature] = transformed.values
+                        valid_features[transformed.columns] = transformed.values
             self.categorical_encoders = categorical_encoders
         else:
             self.categorical_encoders = dict()
