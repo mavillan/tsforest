@@ -280,7 +280,7 @@ class ForecasterBase(object):
                     predict_features["_"+feature] = transformed.values
                 else:
                     del predict_features[feature]
-                    predict_features[feature] = transformed.values
+                    predict_features[transformed.columns] = transformed.values
         features_to_keep = [feature for feature in predict_features.columns if feature in self.raw_features]
         return predict_features.loc[:, features_to_keep]
     
