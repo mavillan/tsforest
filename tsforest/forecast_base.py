@@ -75,9 +75,6 @@ class ForecasterBase(object):
         self.categorical_features = categorical_features.copy()
         self.calendar_anomaly = calendar_anomaly
         self.ts_uid_columns = ts_uid_columns
-        for ts_uid_column in ts_uid_columns:  
-            if ts_uid_column in categorical_features: continue
-            self.categorical_features[ts_uid_column] = "default"
         self.trend_models = trend_models
         self.target_scaler = target_scaler
         self.lags = lags
